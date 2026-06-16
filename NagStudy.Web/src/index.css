@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+/* Tailwind v4 design tokens (used as bg-navy, text-coral, font-display, …) — NagStudy brand */
+@theme {
+  --font-display: "Fraunces", serif;
+  --font-body: "Nunito", -apple-system, "Segoe UI", sans-serif;
+
+  --color-navy: #1b2150;
+  --color-ink2: #5e6282;
+  --color-ink3: #9aa0b0;
+  --color-coral: #e8734a;
+  --color-coral2: #f08a63;
+  --color-coral-soft: #fdede5;
+  --color-cream: #fffdf9;
+  --color-cream2: #fbf8f3;
+  --color-line: #ece7df;
+  --color-mint: #6fa07a;
+  --color-sky: #6e89be;
+  --color-rose: #d98c97;
+  --color-gold: #c2a05b;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--color-cream);
+  color: var(--color-navy);
+}
+
+/* We render our own show/hide eye in PasswordInput — hide the browser's built-in
+   reveal/clear icons (Edge/IE) so password fields don't show two eyes. */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}

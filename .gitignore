@@ -1,0 +1,30 @@
+# ── .NET (NagStudy.API) ──
+bin/
+obj/
+*.user
+# Local Development overrides — may contain machine-specific connection strings.
+appsettings.Development.json
+# NOTE: real secrets (Jwt:Key, Admin:Password) live in user-secrets, which is stored
+# OUTSIDE the repo (%APPDATA%\Microsoft\UserSecrets) and is never committed. See README.md.
+
+# ── Node / Vite (NagStudy.Web) ──
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# ── Logs & env ──
+*.log
+.env
+.env.*
+!.env.example
+
+# ── Editor / OS ──
+.vs/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.suo
+.DS_Store
+Thumbs.db
