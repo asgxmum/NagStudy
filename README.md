@@ -480,7 +480,7 @@ NagStudy.Web/
 
 #### 任务详情
 
-**C1. 🔴 后端没有 `AdminController`**
+**C1. 🔴 后端没有 `AdminController`** (已解决, 6.23-ZZY)
 
 - `User.Status`（`Active/Banned/Deleted`）、种子管理员、`Role == "Admin"` 都存在并被用到，
   却没地方能改它们。
