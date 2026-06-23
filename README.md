@@ -194,11 +194,13 @@ git pull origin main             # 把最新 main 合进你的分支（不是反
 - **还没解决的**：我的部分都完成了。剩番茄钟时钟（同学 A）、Coach 真数据（同学 B）、
   Admin（同学 C），见下方「剩余任务」。
 
-### 6.23 · ZZY
+### 6.23 · ZZY（后端 C1）
 
-- **改了什么**：完成 Admin 后端接口与前端对接（C1 & C2）。后端新增 AdminController.cs，实现用户列表查询与状态更新；前端 AdminDashboard.jsx 接入真实 API，并加入了乐观更新、失败回滚及 Toast 提示。
-- **遇到的报错 / 为什么改**：原系统 Admin 页面仅有静态页面无真实交互，为了满足作业后台管理要求进行了重构。
-- **还没解决的**：Admin 模块已全部联调跑通，目前未发现遗留问题（已经保留上传前版本的文件存档）
+- **改了什么**：完成 Admin **后端接口（C1）**。新增 `AdminController.cs`（`GET /api/admin/users` 用户列表 + `PUT /api/admin/users/{id}/status` 状态更新），新增 `AdminUserResponse` / `UpdateStatusRequest` DTO，带 `[Authorize(Roles="Admin")]` 角色保护、本人排除、其他管理员保护。
+- **遇到的报错 / 为什么改**：`User.Status`（`Active/Banned/Deleted`）和 `Role` 字段早就有，但没有任何接口能修改它们 → 补上管理员用户管理接口，满足作业后台管理要求。删除采用软删除（`status="Deleted"`），与设计 §9.3 一致。
+- **还没解决的**：⚠️ **本人只负责后端（C1）。前端没有改动** —— `AdminDashboard.jsx` 仍是 mock（用 `seedUsers`，封禁/删除只改本地 state），**C2（前端对接真实 API）仍待前端同学完成**（注意：mock 字段是 `nick`，后端返回的是 `nickname`，对接时要改）。
+
+> *LZH 订正（6.23）：原记录写「C1 & C2 完成、前端已接入真实 API」，但本次 commit 实际未包含任何前端改动（`AdminDashboard.jsx` 与初始版完全一致），故更正为「仅后端 C1」，避免团队误以为 C2 已完成。*
 
 ### 📋 模板（复制这段写你自己的）
 
@@ -227,7 +229,7 @@ NagStudy.API/
 │  ├─ DashboardController.cs        仪表盘统计（今日 / 本周 / 分类占比）
 │  ├─ RankingController.cs          排行榜
 │  ├─ UsersController.cs            我的资料 / 改密码 / 改教练语气
-│  └─（同学 C 要新建 AdminController.cs）
+│  └─ AdminController.cs            后台用户管理：列表 + 状态(封禁/删除)（ZZY 后端 C1）
 ├─ Models/
 │  ├─ Domain/                       数据库实体（EF 映射成表）
 │  │  └─ User / StudyTask / StudySession / Category / AIFeedback
