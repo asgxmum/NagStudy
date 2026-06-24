@@ -202,6 +202,12 @@ git pull origin main             # 把最新 main 合进你的分支（不是反
 
 > *LZH 订正（6.23）：原记录写「C1 & C2 完成、前端已接入真实 API」，但本次 commit 实际未包含任何前端改动（`AdminDashboard.jsx` 与初始版完全一致），故更正为「仅后端 C1」，避免团队误以为 C2 已完成。*
 
+### 6.23 · LZH（补充文档）
+
+- **改了什么**：在「剩余任务 → 同学 C → C2」补充了 **Admin 用户管理的状态行为规范**（Ban/Unban 只在 Active↔Banned；Delete=软删除后从列表消失；Deleted 不可被 Ban/Unban 复活），并补上 `nick`→`nickname` 字段对齐说明。
+- **遇到的报错 / 为什么改**：admin 前端同学发现「`Deleted` 用户点 Ban/Unban 后又变回 `Active`」，问是不是预期 —— 不是，是行为没写清楚导致的歧义。补上规范避免再踩坑。
+- **还没解决的**：规范只是文档；按规范实际改 `AdminDashboard.jsx` 仍待 admin 前端同学完成。
+
 ### 📋 模板（复制这段写你自己的）
 
 ```
@@ -494,7 +500,16 @@ NagStudy.Web/
 
 - 统计卡片和用户表来自 `seedUsers`；封禁/删除只改本地 state，没调 API。
 - 改成从 `GET /api/admin/users` 获取；封禁/删除接到 `PUT .../status`，乐观更新 + 失败提示。
+- 字段对齐：mock 用 `nick`，后端返回 `nickname` —— 表格里要从 `u.nick` 改成 `u.nickname`。
 - 注意：右上角管理员邮箱 LZH 已改对，重写时别又写回错的。
+
+**状态行为规范（Admin 用户管理）—— 重要，照这个做**
+
+- 状态只有三种：`Active` / `Banned` / `Deleted`。
+- **Ban / Unban 按钮**：只在 `Active` ↔ `Banned` 之间切换，**绝不碰 `Deleted`**。
+- **Delete 按钮**：调 `PUT /api/admin/users/{id}/status` body `{ "status": "Deleted" }`（软删除，DB 保留记录），成功后**该行从列表消失**。
+- **列表默认不显示 `Deleted` 用户**：前端 `users.filter(u => u.status !== "Deleted")`，或请后端在 `GET /admin/users` 加 `.Where(u => u.Status != "Deleted")`（任选其一，前端做就够）。
+- ❌ **禁止**：`Deleted` 用户被 Ban/Unban 重新变回 `Active`（这是 bug，不是预期行为）。
 
 > C1 和 C2 是一对 —— 先做后端接口，再接前端。
 
