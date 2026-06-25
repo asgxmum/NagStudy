@@ -213,6 +213,15 @@ git pull origin main             # 把最新 main 合进你的分支（不是反
 - **遇到的报错 / 为什么改**：联调时发现“软删除”的用户点击 Ban 会触发状态机 Bug 重新变回 Active。根据最新规范，在前端获取列表时增加了 `filter(u => u.status !== "Deleted")` 进行过滤，成功解决问题。为满足大作业 Rubric 对真实 Dashboard 数据的硬性要求，额外补齐了后端的统计接口。
 - **还没解决的**：Admin 模块（C1 & C2）已全面完工并 100% 遵守行为规范，目前暂无发现遗留问题。
 
+### 6.25 · LZH（合并记录）
+
+- **改了什么**：把两位同学的 Admin 分支都合并进了 `main`，目前 `main` 已是完整可运行版本。
+  - **ZZY（后端 C1）** `feat/admin-backend` → 已合并进 `main`（PR #1）。
+  - **ZK（前端 C2 + 后端 Stats）** `feat/admin-frontend` → 已合并进 `main`（PR #2，合并时解决了 README 变更记录冲突）。
+- **遇到的报错 / 为什么改**：PR #2 合并时 README「变更记录」处有冲突（ZK 的 6.25 与 LZH 的 6.23 加在同一位置）—— 已保留两条、按时间排序解决。另：本地实测时遇到 `5178 address already in use`，原因是 zip 文件夹（`NagStudy-feat-admin-frontend`）里残留的旧后端进程占用端口，杀掉即可，与代码无关。
+- **已验证**：`main` 后端 `dotnet build` 0 警告 0 错误；本地启动后用 admin 账号登录、`/admin/stats`、`/admin/users`、Ban/Unban/Delete 均正常。
+- **还没解决的**：暂无。请大家 `git pull origin main` 拿最新版；以后**别在 zip 文件夹里运行**，统一在 `d:\...\NagStudy\` 主仓库里跑。
+
 ### 📋 模板（复制这段写你自己的）
 
 ```
