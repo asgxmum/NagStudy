@@ -206,7 +206,12 @@ git pull origin main             # 把最新 main 合进你的分支（不是反
 
 - **改了什么**：在「剩余任务 → 同学 C → C2」补充了 **Admin 用户管理的状态行为规范**（Ban/Unban 只在 Active↔Banned；Delete=软删除后从列表消失；Deleted 不可被 Ban/Unban 复活），并补上 `nick`→`nickname` 字段对齐说明。
 - **遇到的报错 / 为什么改**：admin 前端同学发现「`Deleted` 用户点 Ban/Unban 后又变回 `Active`」，问是不是预期 —— 不是，是行为没写清楚导致的歧义。补上规范避免再踩坑。
-- **还没解决的**：规范只是文档；按规范实际改 `AdminDashboard.jsx` 仍待 admin 前端同学完成。
+- **还没解决的**：规范只是文档；按规范实际改 `AdminDashboard.jsx` 待 admin 前端同学完成（已在 6.25 由 ZK 完成）。
+
+### 6.25 · ZK (前端C2)
+- **改了什么**：完成了 Admin 前端的真实 API 对接（C2 任务），并在后端补充了 `GET /api/admin/stats` 接口以实现真实数据看板联动。全面移除了所有 Mock 数据，将表格字段从 `nick` 修正为真实的 `nickname`。
+- **遇到的报错 / 为什么改**：联调时发现“软删除”的用户点击 Ban 会触发状态机 Bug 重新变回 Active。根据最新规范，在前端获取列表时增加了 `filter(u => u.status !== "Deleted")` 进行过滤，成功解决问题。为满足大作业 Rubric 对真实 Dashboard 数据的硬性要求，额外补齐了后端的统计接口。
+- **还没解决的**：Admin 模块（C1 & C2）已全面完工并 100% 遵守行为规范，目前暂无发现遗留问题。
 
 ### 📋 模板（复制这段写你自己的）
 

@@ -1,41 +1,81 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { adminUsers as seedUsers } from "../data/mock";
-
-// Ported from NagStudy.html #screen-admin + renderAdmUsers()/admBan()/admDel().
-// Standalone full-screen — role-gated by ProtectedRoute role="Admin" (§8.1).
-// Single school: no university/domain management. TODO: api/admin.
-
-const STATS = [
-  { label: "👥 Total users", value: "1,284", delta: "▲ +63 this week", deltaCls: "up" },
-  { label: "🟢 Active this week", value: "812", delta: "63% of users", deltaCls: "flat" },
-  { label: "⏱️ Focus logged", value: "9,940h", delta: "▲ all-time", deltaCls: "up" },
-  { label: "🏫 School", value: "XMU Malaysia", delta: "single campus", deltaCls: "flat", small: true },
-];
+import client from "../api/client"; // Import the configured Axios client
 
 export default function AdminDashboard() {
   const { logout } = useAuth();
   const navigate = useNavigate();
-  const [users, setUsers] = useState(seedUsers);
+  
+  // State for user list
+  const [users, setUsers] = useState([]);
+  
+  // State for dashboard statistics
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    activeUsers: 0,
+    activePercentage: 0,
+    totalFocusHours: 0
+  });
 
   function handleLogout() {
     logout();
-    navigate("/"); // back to the public landing (it shows the logged-out nav)
+    navigate("/"); // back to the public landing
   }
 
-  // Ban <-> Unban toggle. TODO: api/admin — PATCH /api/admin/users/{id}/status
-  function toggleBan(id) {
-    setUsers((prev) =>
-      prev.map((u) =>
-        u.id === id ? { ...u, status: u.status === "Banned" ? "Active" : "Banned" } : u
-      )
-    );
+  // Fetch real users from the backend API
+  const fetchUsers = async () => {
+    try {
+      const res = await client.get("/admin/users");
+      // Filter out 'Deleted' users according to the strict state guidelines
+      const activeAndBannedUsers = res.data.filter(u => u.status !== "Deleted");
+      setUsers(activeAndBannedUsers);
+    } catch (error) {
+      console.error("Failed to fetch users:", error);
+    }
+  };
+
+  // Fetch real statistics from the backend API
+  const fetchStats = async () => {
+    try {
+      const res = await client.get("/admin/stats");
+      setStats(res.data);
+    } catch (error) {
+      console.error("Failed to fetch stats:", error);
+    }
+  };
+
+  // Fetch both users and stats once on component mount
+  useEffect(() => {
+    fetchUsers();
+    fetchStats();
+  }, []);
+
+  // Toggle user ban status via API
+  async function toggleBan(user) {
+    const newStatus = user.status === "Banned" ? "Active" : "Banned";
+    try {
+      await client.put(`/admin/users/${user.id}/status`, { status: newStatus });
+      fetchUsers(); // Refresh the list
+      fetchStats(); // Refresh the stats (Active count might have changed)
+    } catch (error) {
+      console.error("Failed to update status:", error);
+      alert("Failed to update user status. Please try again.");
+    }
   }
 
-  // Remove the account. TODO: api/admin — DELETE /api/admin/users/{id}
-  function deleteUser(id) {
-    setUsers((prev) => prev.filter((u) => u.id !== id));
+  // Soft delete user via API
+  async function deleteUser(id) {
+    if (!window.confirm("Are you sure you want to delete this user?")) return;
+    
+    try {
+      await client.put(`/admin/users/${id}/status`, { status: "Deleted" });
+      fetchUsers(); // Refresh the list, the deleted user should disappear
+      fetchStats(); // Refresh the stats (Total and Active count might have changed)
+    } catch (error) {
+      console.error("Failed to delete user:", error);
+      alert("Failed to delete user. Please try again.");
+    }
   }
 
   return (
@@ -58,17 +98,31 @@ export default function AdminDashboard() {
           <p>Operate the platform — stats and users.</p>
         </div>
 
-        {/* Stat cards */}
+        {/* Dynamic Stat cards */}
         <div className="grid-stats">
-          {STATS.map((s) => (
-            <div className="stat" key={s.label}>
-              <div className="lbl">{s.label}</div>
-              <div className="val" style={s.small ? { fontSize: "19px" } : undefined}>
-                {s.value}
-              </div>
-              <div className={`delta ${s.deltaCls}`}>{s.delta}</div>
-            </div>
-          ))}
+          <div className="stat">
+            <div className="lbl">👥 Total users</div>
+            <div className="val">{stats.totalUsers}</div>
+            <div className="delta flat">Registered students</div>
+          </div>
+
+          <div className="stat">
+            <div className="lbl">🟢 Active accounts</div>
+            <div className="val">{stats.activeUsers}</div>
+            <div className="delta up">{stats.activePercentage}% of users</div>
+          </div>
+
+          <div className="stat">
+            <div className="lbl">⏱️ Focus logged</div>
+            <div className="val">{stats.totalFocusHours}h</div>
+            <div className="delta up">▲ all-time</div>
+          </div>
+
+          <div className="stat">
+            <div className="lbl">🏫 School</div>
+            <div className="val" style={{ fontSize: "19px" }}>XMU Malaysia</div>
+            <div className="delta flat">Single campus</div>
+          </div>
         </div>
 
         {/* User management */}
@@ -87,14 +141,14 @@ export default function AdminDashboard() {
             <tbody id="admUsers">
               {users.map((u) => (
                 <tr key={u.id}>
-                  <td className="nm">{u.nick}</td>
+                  <td className="nm">{u.nickname}</td>
                   <td>
                     <span className={`adm-badge ${u.status === "Banned" ? "banned" : "active"}`}>
                       {u.status}
                     </span>
                   </td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                    <button className="adm-act" onClick={() => toggleBan(u.id)}>
+                    <button className="adm-act" onClick={() => toggleBan(u)}>
                       {u.status === "Banned" ? "Unban" : "Ban"}
                     </button>
                     <button className="adm-act danger" onClick={() => deleteUser(u.id)}>
@@ -103,6 +157,14 @@ export default function AdminDashboard() {
                   </td>
                 </tr>
               ))}
+              {/* Show loading state when array is empty */}
+              {users.length === 0 && (
+                <tr>
+                  <td colSpan="3" style={{ textAlign: "center", padding: "20px", color: "#888" }}>
+                    Loading user data...
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
