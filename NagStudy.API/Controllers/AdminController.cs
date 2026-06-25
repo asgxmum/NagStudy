@@ -63,4 +63,33 @@ public class AdminController : ControllerBase
             CreatedAt = user.CreatedAt
         });
     }
+
+    [HttpGet("stats")]
+    public async Task<IActionResult> GetAdminStats()
+    {
+        // 1. Calculate total registered users (excluding permanently deleted ones and admins)
+        var totalUsers = await _db.Users
+            .CountAsync(u => u.Role == "User" && u.Status != "Deleted");
+
+        // 2. Calculate active users
+        var activeUsers = await _db.Users
+            .CountAsync(u => u.Role == "User" && u.Status == "Active");
+
+        // 3. Calculate total focus hours across all users
+        // StudySession.Duration is stored in seconds, so we divide by 3600
+        var totalFocusSeconds = await _db.StudySessions.SumAsync(s => s.Duration);
+        var totalFocusHours = Math.Round(totalFocusSeconds / 3600.0, 1);
+
+        // 4. Calculate active percentage safely
+        var activePercentage = totalUsers == 0 ? 0 : Math.Round((double)activeUsers / totalUsers * 100);
+
+        // Return as JSON
+        return Ok(new
+        {
+            totalUsers = totalUsers,
+            activeUsers = activeUsers,
+            activePercentage = activePercentage,
+            totalFocusHours = totalFocusHours
+        });
+    }
 }
