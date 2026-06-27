@@ -2,9 +2,9 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.SemanticKernel;
 using NagStudy.API.Data;
 using NagStudy.API.Services;
-using NagStudy.API.Models.Domain;
 using NagStudy.API.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,6 +18,13 @@ builder.Services.AddDbContext<NagStudyContext>(options => options.UseSqlServer(b
 
 //Register TokenService
 builder.Services.AddSingleton<TokenService>();
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<CoachKernelFactory>();
+builder.Services.AddSingleton<CoachFunctionInvocationFilter>();
+builder.Services.AddScoped<GeminiEmbeddingService>();
+builder.Services.AddScoped<RagService>();
+builder.Services.AddScoped<CoachService>();
+builder.Services.AddScoped<TriggerService>();
 
 //Global exception handling → clean ProblemDetails responses (no stack-trace leak)
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -44,51 +51,37 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     };
 });
 
-//CORS
+//CORS — Vite may use 5173+ when ports are busy; allow any localhost origin in dev.
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
-       policy.WithOrigins("http://localhost:5173")
-             .AllowAnyHeader()
-             .AllowAnyMethod());
+    {
+        policy.AllowAnyHeader().AllowAnyMethod();
+        if (builder.Environment.IsDevelopment())
+        {
+            policy.SetIsOriginAllowed(origin =>
+            {
+                if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri)) return false;
+                return uri.Host is "localhost" or "127.0.0.1";
+            });
+        }
+        else
+        {
+            policy.WithOrigins("http://localhost:5173");
+        }
+    });
 });
 
 var app = builder.Build();
 
-//---Admin Seed(If there is no admin when the app starts, create one)
+//--- Database: EnsureCreated from current model + seed data (no EF migrations)
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<NagStudyContext>();
+    DatabaseInitializer.Initialize(db, app.Configuration, app.Logger);
 
-    if (!db.Users.Any(u => u.Role == "Admin"))
-    {
-        var adminCfg = app.Configuration.GetSection("Admin");
-        var adminPw = adminCfg["Password"]; // secret — from user-secrets / env, not appsettings.json
-        if (string.IsNullOrWhiteSpace(adminPw))
-        {
-            app.Logger.LogWarning(
-                "Admin:Password not set — skipping admin seed. Set it with: dotnet user-secrets set \"Admin:Password\" \"...\" (see README.md).");
-        }
-        else
-        {
-            db.Users.Add(new User
-            {
-                Email = adminCfg["Email"]!.ToLower(),
-                Nickname = adminCfg["Nickname"]!,
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword(adminPw),
-                Role = "Admin",
-                AiTone = "Normal",
-                Status = "Active",
-                CreatedAt = DateTime.UtcNow
-            });
-            db.SaveChanges();
-        }
-    }
-
-    //Inject demo data only in the development environment.
-    //Runs every startup, but each step is idempotent (skips data that already exists).
     if (app.Environment.IsDevelopment())
-        DemoSeeder.Seed(db);
+        DatabaseInitializer.SeedDevelopmentData(db);
 }
 
 // Configure the HTTP request pipeline.

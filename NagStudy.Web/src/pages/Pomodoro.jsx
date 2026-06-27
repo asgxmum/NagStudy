@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import api from "../api/client";
 import { taskColor } from "../utils/taskColor";
+import { useNag } from "../context/NagContext";
 
 // Pomodoro — prototype layout (ring timer + presets + category chips + today's log),
 // wired to the backend: categories from /api/categories, sessions to /api/studysessions.
@@ -69,6 +70,8 @@ export default function Pomodoro() {
   const [taskId, setTaskId] = useState(null); // which task this focus is for (optional)
   const [donePrompt, setDonePrompt] = useState(null); // { id, title } → offer to mark a task done after a session
 
+  const { setFocusSnapshot } = useNag();
+
   const demoRef = useRef(demo);
   demoRef.current = demo; // keep the interval's speed reading current without resetting it
 
@@ -125,6 +128,20 @@ export default function Pomodoro() {
     }, 1000);
     return () => clearInterval(id);
   }, [running]);
+
+  // Share live focus state with NagContext for Nagging check-ins.
+  useEffect(() => {
+    const selTask = tasks.find((t) => t.id === taskId);
+    const elapsedMin = Math.floor(focused / 60);
+    setFocusSnapshot({
+      isFocusing: running,
+      focusTaskId: running && taskId ? taskId : null,
+      focusTaskTitle: running && selTask ? selTask.title : null,
+      focusCategory: running && cat ? cat.name : null,
+      focusElapsedMinutes: running ? elapsedMin : 0,
+    });
+    return () => setFocusSnapshot(null);
+  }, [running, taskId, tasks, cat, focused, setFocusSnapshot]);
 
   // Reaching zero auto-logs the session.
   useEffect(() => {
@@ -190,9 +207,16 @@ export default function Pomodoro() {
     try {
       const { data: t } = await api.get(`/tasks/${p.id}`);
       await api.put(`/tasks/${p.id}`, {
-        title: t.title, isImportant: t.isImportant, when: t.when,
-        status: "Done", color: t.color,
-        startTime: t.startTime, endTime: t.endTime,
+        title: t.title,
+        description: t.description,
+        isImportant: t.isImportant,
+        remindBeforeStart: t.remindBeforeStart ?? false,
+        scheduledDate: t.scheduledDate,
+        when: t.when,
+        status: "Done",
+        color: t.color,
+        startTime: t.startTime,
+        endTime: t.endTime,
         completedAt: new Date().toISOString(),
       });
       setTasks((prev) => prev.filter((x) => x.id !== p.id)); // drop from the picker

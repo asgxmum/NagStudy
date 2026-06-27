@@ -47,6 +47,7 @@ public class AuthController : ControllerBase
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             Role = "User",
             AiTone = "Normal",
+            AiNotificationsEnabled = true,
             Status = "Active",
             CreatedAt = DateTime.UtcNow
         };
@@ -73,17 +74,29 @@ public class AuthController : ControllerBase
 
         await _db.SaveChangesAsync();
 
-        //Generate token +Response
-        return Ok(new AuthResponse
+        var normalProfile = await _db.AgentProfiles.FirstOrDefaultAsync(p => p.IsBuiltIn && p.Key == "Normal");
+        if (normalProfile != null)
+            user.NagProfileId = normalProfile.Id;
+
+        await _db.SaveChangesAsync();
+
+        return Ok(await BuildAuthResponse(user));
+    }
+
+    private async Task<AuthResponse> BuildAuthResponse(User user)
+    {
+        await _db.Entry(user).Reference(u => u.NagProfile).LoadAsync();
+        return new AuthResponse
         {
             Token = _tokenService.GenerateToken(user),
             Email = user.Email,
             Nickname = user.Nickname,
             Role = user.Role,
-            AiTone = user.AiTone
-        });
-
-
+            AiTone = user.NagProfile?.Key ?? user.AiTone,
+            NagProfileId = user.NagProfileId,
+            NagProfileName = user.NagProfile?.Name,
+            NagProfileKey = user.NagProfile?.Key
+        };
     }
 
     //POST /api/auth/login
@@ -103,14 +116,6 @@ public class AuthController : ControllerBase
         if (user.Status != "Active")
             return Unauthorized(new { message = "This account is not active" });
 
-        //4. Generate Token + Response 
-        return Ok(new AuthResponse
-        {
-            Token = _tokenService.GenerateToken(user),
-            Email = user.Email,
-            Nickname = user.Nickname,
-            Role = user.Role,
-            AiTone = user.AiTone
-        });
+        return Ok(await BuildAuthResponse(user));
     }
 }

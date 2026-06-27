@@ -8,7 +8,7 @@ using NagStudy.API.Extensions;
 namespace NagStudy.API.Controllers;
 
 [ApiController]
-[Route("api/[controller]")] // for /api/users
+[Route("api/[controller]")]
 [Authorize]
 public class UsersController : ControllerBase
 {
@@ -21,20 +21,18 @@ public class UsersController : ControllerBase
 
     private int CurrentUserId => User.GetUserId();
 
-    //GET /api/users/me - my profile (email is the locked login id)
     [HttpGet("me")]
     public async Task<IActionResult> Me()
     {
-        var user = await _db.Users.FindAsync(CurrentUserId);
+        var user = await _db.Users.Include(u => u.NagProfile).FirstOrDefaultAsync(u => u.Id == CurrentUserId);
         if (user == null) return NotFound();
-        return Ok(new { user.Email, user.Nickname, user.Role, user.AiTone });
+        return Ok(MapUser(user));
     }
 
-    //PUT /api/users/me - change my nickname (must stay unique)
     [HttpPut("me")]
     public async Task<IActionResult> UpdateProfile(UpdateProfileRequest request)
     {
-        var user = await _db.Users.FindAsync(CurrentUserId);
+        var user = await _db.Users.Include(u => u.NagProfile).FirstOrDefaultAsync(u => u.Id == CurrentUserId);
         if (user == null) return NotFound();
 
         var dup = await _db.Users
@@ -43,10 +41,36 @@ public class UsersController : ControllerBase
 
         user.Nickname = request.Nickname;
         await _db.SaveChangesAsync();
-        return Ok(new { user.Email, user.Nickname, user.Role, user.AiTone });
+        return Ok(MapUser(user));
     }
 
-    //PUT /api/users/me/tone - change my AI coach persona (Soft/Normal/Harsh)
+    [HttpPut("me/nag-profile")]
+    public async Task<IActionResult> UpdateNagProfile(UpdateNagProfileRequest request)
+    {
+        var user = await _db.Users.Include(u => u.NagProfile).FirstOrDefaultAsync(u => u.Id == CurrentUserId);
+        if (user == null) return NotFound();
+
+        var profile = await _db.AgentProfiles.FirstOrDefaultAsync(p =>
+            p.Id == request.ProfileId && p.IsBuiltIn);
+        if (profile == null) return BadRequest(new { message = "Profile not found." });
+
+        user.NagProfileId = profile.Id;
+        user.AiTone = profile.Key ?? user.AiTone;
+        await _db.SaveChangesAsync();
+        return Ok(MapUser(user));
+    }
+
+    [HttpPut("me/ai-notifications")]
+    public async Task<IActionResult> UpdateAiNotifications(UpdateAiNotificationsRequest request)
+    {
+        var user = await _db.Users.Include(u => u.NagProfile).FirstOrDefaultAsync(u => u.Id == CurrentUserId);
+        if (user == null) return NotFound();
+        user.AiNotificationsEnabled = request.Enabled;
+        await _db.SaveChangesAsync();
+        return Ok(MapUser(user));
+    }
+
+    /// <summary>Legacy endpoint — maps tone key to system profile</summary>
     [HttpPut("me/tone")]
     public async Task<IActionResult> UpdateTone(UpdateToneRequest request)
     {
@@ -54,15 +78,18 @@ public class UsersController : ControllerBase
         if (!allowed.Contains(request.AiTone))
             return BadRequest(new { message = "Invalid tone. Use Soft, Normal, or Harsh." });
 
-        var user = await _db.Users.FindAsync(CurrentUserId);
+        var profile = await _db.AgentProfiles.FirstOrDefaultAsync(p => p.IsBuiltIn && p.Key == request.AiTone);
+        if (profile == null) return BadRequest(new { message = "Profile not found." });
+
+        var user = await _db.Users.Include(u => u.NagProfile).FirstOrDefaultAsync(u => u.Id == CurrentUserId);
         if (user == null) return NotFound();
 
         user.AiTone = request.AiTone;
+        user.NagProfileId = profile.Id;
         await _db.SaveChangesAsync();
-        return Ok(new { user.Email, user.Nickname, user.Role, user.AiTone });
+        return Ok(MapUser(user));
     }
 
-    //PUT /api/users/me/password - change my password (verify current, re-hash new)
     [HttpPut("me/password")]
     public async Task<IActionResult> ChangePassword(ChangePasswordRequest request)
     {
@@ -76,4 +103,16 @@ public class UsersController : ControllerBase
         await _db.SaveChangesAsync();
         return NoContent();
     }
+
+    private static object MapUser(Models.Domain.User user) => new
+    {
+        user.Email,
+        user.Nickname,
+        user.Role,
+        aiTone = user.NagProfile?.Key ?? user.AiTone,
+        nagProfileId = user.NagProfileId,
+        nagProfileName = user.NagProfile?.Name,
+        nagProfileKey = user.NagProfile?.Key,
+        aiNotificationsEnabled = user.AiNotificationsEnabled
+    };
 }

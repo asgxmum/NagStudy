@@ -1,6 +1,16 @@
-// Shared task colour palette so Tasks · Gantt and Pomodoro show the SAME colour for the same
-// task. Used as a stable per-id fallback when the user hasn't picked an explicit colour yet.
-export const TASK_COLORS = ["#E8734A", "#2C3E63", "#6FA07A", "#BE9E54", "#6E89BE", "#D98C97"];
+// Theme-aligned task colours (Tasks · Gantt · Pomodoro). Stable per-id fallback when unset.
+export const TASK_COLORS = [
+  "#E8734A", // coral — primary
+  "#1B2150", // navy
+  "#5BA06E", // green
+  "#E2A33B", // amber
+  "#6E89BE", // sky
+  "#D98C97", // rose
+  "#3FA7A2", // teal
+];
 
 export const taskColor = (id) =>
   TASK_COLORS[((id % TASK_COLORS.length) + TASK_COLORS.length) % TASK_COLORS.length];
+
+export const isPresetTaskColor = (color) =>
+  !!color && TASK_COLORS.some((c) => c.toLowerCase() === color.toLowerCase());

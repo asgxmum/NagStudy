@@ -1,12 +1,11 @@
+import { useState } from "react";
 import { NavLink, Outlet, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { NagProvider } from "../context/NagContext";
 import { personas } from "../data/mock";
 import BlinkFace from "./BlinkFace";
+import NagHistoryPanel from "./NagHistoryPanel";
 
-// App shell using the prototype's exact markup/classes (.screen.ap > .app > .sidebar + main),
-// styled by the reused prototype.css. Logic (routing, logout) unchanged.
-
-// AI coach persona shown on the user card, derived from the account's AiTone (Soft/Normal/Harsh).
 const TONE_PERSONA = {
   Soft: "The Healer",
   Normal: "The Secretary",
@@ -24,10 +23,10 @@ const NAV = [
 export default function AppLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [nagOpen, setNagOpen] = useState(false);
 
-  // Tint the persona chip with the active coach's colour (Soft=green / Normal=navy / Harsh=gold),
-  // sharing personas[] as the single source so the sidebar matches the Coach page exactly.
-  const persona = personas.find((p) => p.key === user?.aiTone) ?? personas[1]; // default: The Secretary
+  const toneKey = user?.nagProfileKey ?? user?.aiTone ?? "Normal";
+  const persona = personas.find((p) => p.key === toneKey) ?? personas[1];
   const toneStyle = {
     background: `${persona.color}22`,
     color: persona.color,
@@ -45,6 +44,7 @@ export default function AppLayout() {
   }
 
   return (
+    <NagProvider>
     <div className="screen ap active">
       <div className="app">
         <aside className="sidebar">
@@ -86,9 +86,9 @@ export default function AppLayout() {
               role="button"
               title="Adjust your AI coach mode"
               style={{ cursor: "pointer", ...toneStyle }}
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate("/app/coach"); }}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); navigate("/app/settings"); }}
             >
-              {TONE_PERSONA[user?.aiTone] ?? "📋 The Secretary"}
+              {user?.nagProfileName ?? TONE_PERSONA[toneKey] ?? "📋 The Secretary"}
             </span>
           </Link>
 
@@ -100,8 +100,12 @@ export default function AppLayout() {
         <main>
           <Outlet />
         </main>
+
+        <button type="button" className="nag-fab" title="Nag history" onClick={() => setNagOpen((o) => !o)}>💬</button>
+        {nagOpen && <NagHistoryPanel onClose={() => setNagOpen(false)} />}
       </div>
       <div id="toast-root" />
     </div>
+    </NagProvider>
   );
 }

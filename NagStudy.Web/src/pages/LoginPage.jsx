@@ -32,7 +32,16 @@ export default function LoginPage() {
     try {
       const data = await loginApi(email, password); // { token, email, nickname, role, aiTone }
       // "Remember me" decides persistence: localStorage (stays) vs sessionStorage (clears on close).
-      login(data.token, { email: data.email, nickname: data.nickname, role: data.role, aiTone: data.aiTone }, remember);
+      login(data.token, {
+        email: data.email,
+        nickname: data.nickname,
+        role: data.role,
+        aiTone: data.aiTone,
+        nagProfileId: data.nagProfileId,
+        nagProfileName: data.nagProfileName,
+        nagProfileKey: data.nagProfileKey,
+        aiNotificationsEnabled: data.aiNotificationsEnabled !== false,
+      }, remember);
       navigate(data.role === "Admin" ? "/admin" : "/app");
     } catch (err) {
       setError(err.response?.data?.message ?? "Login failed. Check your credentials.");

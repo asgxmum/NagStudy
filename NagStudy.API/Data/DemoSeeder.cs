@@ -164,14 +164,20 @@ public static class DemoSeeder
 
             foreach (var p in specs)
             {
+                var dayMyt = todayMyt.AddDays(p.Day);
                 DateTime? start = null, end = null, completed = null;
                 if (p.Sh.HasValue)
                 {
-                    var dayMyt = todayMyt.AddDays(p.Day);
-                    start = dayMyt.AddHours(p.Sh.Value).AddHours(-8);             // MYT wall-clock -> UTC
+                    start = dayMyt.AddHours(p.Sh.Value).AddHours(-8);
                     end   = dayMyt.AddHours(p.Eh ?? p.Sh.Value + 1).AddHours(-8);
                 }
                 if (p.Done) completed = end ?? now;
+
+                DateTime? scheduledDate = null;
+                if (p.Sh.HasValue)
+                    scheduledDate = dayMyt.AddHours(-8);
+                else if (!string.Equals(p.When, "Later", StringComparison.OrdinalIgnoreCase))
+                    scheduledDate = dayMyt.AddHours(-8);
 
                 db.Tasks.Add(new StudyTask
                 {
@@ -179,11 +185,12 @@ public static class DemoSeeder
                     Title = p.Title,
                     IsImportant = p.Imp,
                     When = p.When,
+                    ScheduledDate = scheduledDate,
                     Status = p.Status,
                     StartTime = start,
                     EndTime = end,
                     CompletedAt = completed,
-                    CreatedAt = now.AddDays(p.Day), // brain-dump tasks belong to their day via CreatedAt
+                    CreatedAt = now.AddDays(p.Day),
                 });
             }
             db.SaveChanges();

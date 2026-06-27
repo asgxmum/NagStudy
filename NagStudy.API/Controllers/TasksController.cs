@@ -3,30 +3,50 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NagStudy.API.Data;
+using NagStudy.API.Extensions;
+using NagStudy.API.Infrastructure;
 using NagStudy.API.Models.Domain;
 using NagStudy.API.Models.DTO;
-using NagStudy.API.Extensions;
+using NagStudy.API.Services;
 
 namespace NagStudy.API.Controllers;
 
 [ApiController]
-[Route("api/[controller]")] // for /api/tasks
+[Route("api/[controller]")]
 [Authorize]
 public class TasksController : ControllerBase
 {
     private readonly NagStudyContext _db;
+    private readonly RagService _rag;
 
-    public TasksController(NagStudyContext db)
+    public TasksController(NagStudyContext db, RagService rag)
     {
         _db = db;
+        _rag = rag;
     }
 
     private int CurrentUserId => User.GetUserId();
 
-    //GET /api/tasks                  -> all my tasks (back-compat)
-    //GET /api/tasks?date=today       -> only tasks that belong to today (MYT)
-    //GET /api/tasks?date=yesterday   -> only yesterday's (MYT) — for the "Yesterday's review" card
-    //GET /api/tasks?date=2026-06-15  -> a specific MYT day
+    /// <summary>Today queue + Backlog + today's Gantt tasks in one payload.</summary>
+    [HttpGet("board")]
+    public async Task<IActionResult> GetBoard()
+    {
+        var todayMyt = TaskTimeHelper.TodayMyt();
+        var all = await _db.Tasks
+            .Where(t => t.UserId == CurrentUserId)
+            .OrderByDescending(t => t.IsImportant)
+            .ThenBy(t => t.CreatedAt)
+            .ToListAsync();
+
+        var board = new TaskBoardResponse
+        {
+            Today = all.Where(t => TaskTimeHelper.IsTodayBoard(t, todayMyt)).Select(TaskMapper.ToResponse).ToList(),
+            Backlog = all.Where(t => TaskTimeHelper.IsBacklog(t, todayMyt)).Select(TaskMapper.ToResponse).ToList(),
+            Gantt = all.Where(t => TaskTimeHelper.IsOnGanttToday(t, todayMyt)).Select(TaskMapper.ToResponse).ToList(),
+        };
+        return Ok(board);
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetAll([FromQuery] string? date = null)
     {
@@ -34,94 +54,72 @@ public class TasksController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(date))
         {
-            // Which MYT calendar day are we asking about?
-            var todayMyt = DateTime.UtcNow.AddHours(8).Date;
+            var todayMyt = TaskTimeHelper.TodayMyt();
             DateTime dayMyt;
             if (date == "today") dayMyt = todayMyt;
             else if (date == "yesterday") dayMyt = todayMyt.AddDays(-1);
-            else if (DateTime.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)) dayMyt = parsed.Date;
+            else if (DateTime.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+                dayMyt = parsed.Date;
             else return BadRequest(new { message = "Invalid date. Use 'today', 'yesterday', or YYYY-MM-DD." });
 
-            // [start, end) of that MYT day, expressed in UTC (how times are stored).
-            var dayStartUtc = dayMyt.AddHours(-8);
-            var dayEndUtc = dayStartUtc.AddDays(1);
+            var dayStartUtc = TaskTimeHelper.MytDayStartUtc(dayMyt);
+            var dayEndUtc = TaskTimeHelper.MytDayEndUtc(dayMyt);
 
-            // A task belongs to a day by its scheduled StartTime if placed on the Gantt,
-            // otherwise by the day it was brain-dumped (CreatedAt).
             query = query.Where(t =>
+                (t.ScheduledDate != null && t.ScheduledDate >= dayStartUtc && t.ScheduledDate < dayEndUtc) ||
                 (t.StartTime != null && t.StartTime >= dayStartUtc && t.StartTime < dayEndUtc) ||
-                (t.StartTime == null && t.CreatedAt >= dayStartUtc && t.CreatedAt < dayEndUtc));
+                (t.ScheduledDate == null && t.StartTime == null && t.CreatedAt >= dayStartUtc && t.CreatedAt < dayEndUtc));
         }
 
-        var items = await query
-            .OrderByDescending(t => t.CreatedAt)
-            .ToListAsync();
-        return Ok(items);
+        var items = await query.OrderByDescending(t => t.CreatedAt).ToListAsync();
+        return Ok(items.Select(TaskMapper.ToResponse));
     }
 
-    //GET /api/tasks/5
-    [HttpGet("{id}")]
+    [HttpGet("{id:int}")]
     public async Task<IActionResult> GetOne(int id)
     {
-        var item = await _db.Tasks
-            .FirstOrDefaultAsync(t => t.Id == id && t.UserId == CurrentUserId);
+        var item = await _db.Tasks.FirstOrDefaultAsync(t => t.Id == id && t.UserId == CurrentUserId);
         if (item == null) return NotFound();
-        return Ok(item);
+        return Ok(TaskMapper.ToResponse(item));
     }
 
-    //POST /api/tasks
     [HttpPost]
     public async Task<IActionResult> Create(TaskRequest request)
     {
-        var task = new StudyTask
-        {
-            UserId = CurrentUserId,
-            Title = request.Title,
-            IsImportant = request.IsImportant,
-            When = request.When,
-            Status = request.Status,
-            Color = request.Color,
-            StartTime = request.StartTime,
-            EndTime = request.EndTime,
-            CompletedAt = request.CompletedAt,
-            CreatedAt = DateTime.UtcNow
-        };
+        var task = new StudyTask { UserId = CurrentUserId };
+        TaskMapper.ApplyRequest(task, request, isCreate: true);
         _db.Tasks.Add(task);
         await _db.SaveChangesAsync();
-        return CreatedAtAction(nameof(GetOne), new { id = task.Id }, task);
+        return CreatedAtAction(nameof(GetOne), new { id = task.Id }, TaskMapper.ToResponse(task));
     }
 
-    //PUT /api/tasks/5 
-    [HttpPut("{id}")]
+    [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, TaskRequest request)
     {
-        var task = await _db.Tasks
-            .FirstOrDefaultAsync(t => t.Id == id && t.UserId == CurrentUserId);
+        var task = await _db.Tasks.FirstOrDefaultAsync(t => t.Id == id && t.UserId == CurrentUserId);
         if (task == null) return NotFound();
 
-        task.Title = request.Title;
-        task.IsImportant = request.IsImportant;
-        task.When = request.When;
-        task.Status = request.Status;
-        task.Color = request.Color;
-        task.StartTime = request.StartTime;
-        task.EndTime = request.EndTime;
-        task.CompletedAt = request.CompletedAt;
+        var prevStart = task.StartTime;
+        var prevEnd = task.EndTime;
+        TaskMapper.ApplyRequest(task, request, isCreate: false);
+        if (task.StartTime != prevStart)
+            task.StartReminderSentAt = null;
+        if (task.EndTime != prevEnd)
+            task.EndPromptSentAt = null;
         await _db.SaveChangesAsync();
-        return Ok(task);
+        _rag.SyncTaskIndexFireAndForget(CurrentUserId, task);
+        return Ok(TaskMapper.ToResponse(task));
     }
 
-    //DELETE /api/tasks/5
-    [HttpDelete("{id}")]
+    [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id)
     {
-        var task = await _db.Tasks
-            .FirstOrDefaultAsync(t => t.Id == id && t.UserId == CurrentUserId);
+        var task = await _db.Tasks.FirstOrDefaultAsync(t => t.Id == id && t.UserId == CurrentUserId);
         if (task == null) return NotFound();
 
-        _db.Tasks.Remove(task); //The TaskId of the associated session is automatically set to null by the database 
+        _db.Tasks.Remove(task);
         await _db.SaveChangesAsync();
+        _rag.DeleteDocumentFireAndForget(CurrentUserId, "Task", task.Id);
         return NoContent();
-
     }
 }

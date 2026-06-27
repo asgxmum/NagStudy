@@ -1,15 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import PasswordInput from "../components/PasswordInput";
+import { listProfiles, updateNagProfile, updateAiNotifications } from "../api/coach";
 
-// My Page — nickname + password, wired to /api/users/me (email + school are locked).
-
-// Same policy as registration: 8+ chars with an uppercase letter, a digit and a special character.
 const PW_RULE = /^(?=.*[A-Z])(?=.*[\W_])(?=.*\d).{8,}$/;
 
 export default function Settings() {
   const { user, updateUser } = useAuth();
+  const [profiles, setProfiles] = useState([]);
 
   // Profile — nickname is editable, email + school are locked.
   const [nickname, setNickname] = useState(user?.nickname ?? "");
@@ -23,6 +22,13 @@ export default function Settings() {
   const [pwMsg, setPwMsg] = useState({ text: "", ok: false });
   const [savingPw, setSavingPw] = useState(false);
 
+  const [aiMsg, setAiMsg] = useState({ text: "", ok: false });
+  const [notifEnabled, setNotifEnabled] = useState(user?.aiNotificationsEnabled !== false);
+
+  useEffect(() => {
+    listProfiles().then((r) => setProfiles(r.data)).catch(() => {});
+  }, []);
+
   async function saveNick() {
     const v = nickname.trim();
     if (!v) {
@@ -33,7 +39,7 @@ export default function Settings() {
     try {
       const { data } = await api.put("/users/me", { nickname: v });
       setNickname(data.nickname);
-      updateUser({ nickname: data.nickname }); // refresh the navbar / ranking name
+      updateUser({ nickname: data.nickname });
       setNickMsg({ text: `✅ Nickname saved as "${data.nickname}".`, ok: true });
     } catch (err) {
       setNickMsg({ text: err.response?.data?.message ?? "Couldn't save your nickname.", ok: false });
@@ -69,105 +75,104 @@ export default function Settings() {
     }
   }
 
+  async function setNagProfile(profileId) {
+    try {
+      const { data } = await updateNagProfile(profileId);
+      updateUser({
+        nagProfileId: data.nagProfileId,
+        nagProfileName: data.nagProfileName,
+        nagProfileKey: data.nagProfileKey,
+        aiTone: data.aiTone,
+      });
+      setAiMsg({ text: "✅ Nag coach profile updated.", ok: true });
+    } catch (err) {
+      setAiMsg({ text: err.response?.data?.message ?? "Couldn't update profile.", ok: false });
+    }
+  }
+
+  async function toggleNotif() {
+    const next = !notifEnabled;
+    setNotifEnabled(next);
+    try {
+      const { data } = await updateAiNotifications(next);
+      updateUser({ aiNotificationsEnabled: data.aiNotificationsEnabled });
+    } catch {
+      setNotifEnabled(!next);
+    }
+  }
+
   return (
     <section className="view active" id="view-settings">
       <div className="view-head">
         <h2>⚙️ My Page</h2>
-        <p>Change your nickname and password. Your email is locked because it's your school login ID.</p>
+        <p>Profile, password, and AI coach preferences.</p>
       </div>
 
       <div className="grid-2">
         {/* Profile card */}
         <div className="card">
           <h3>👤 Profile</h3>
-
           <div className="set-field">
-            <label htmlFor="set-nickname">
-              Nickname <span className="set-mini">(shown on the ranking)</span>
-            </label>
+            <label htmlFor="set-nickname">Nickname</label>
             <div className="set-row">
-              <input
-                id="set-nickname"
-                className="set-input"
-                maxLength={20}
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-              />
-              <button className="btn btn-primary btn-sm" onClick={saveNick} disabled={savingNick}>
-                {savingNick ? "Saving…" : "Save"}
-              </button>
+              <input id="set-nickname" className="set-input" maxLength={20} value={nickname} onChange={(e) => setNickname(e.target.value)} />
+              <button type="button" className="btn btn-primary btn-sm" onClick={saveNick} disabled={savingNick}>{savingNick ? "Saving…" : "Save"}</button>
             </div>
-            {nickMsg.text && (
-              <div className="set-msg" style={{ color: nickMsg.ok ? "var(--green)" : "var(--coral)" }}>
-                {nickMsg.text}
-              </div>
-            )}
+            {nickMsg.text && <div className="set-msg" style={{ color: nickMsg.ok ? "var(--green)" : "var(--coral)" }}>{nickMsg.text}</div>}
           </div>
-
           <div className="set-field">
-            <label htmlFor="set-email">
-              Email <span className="set-lock">🔒 locked</span>
-            </label>
+            <label htmlFor="set-email">Email</label>
             <input id="set-email" className="set-input" value={user?.email ?? ""} disabled />
-            <p className="set-note">
-              🔒 email is your <b>school + login ID</b> — can't change. Contact an admin if you need it updated.
-            </p>
-          </div>
-
-          <div className="set-field">
-            <label>School</label>
-            <div className="set-input" style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--txt2)" }}>
-              <img src="/Xiamen_University_logo.svg" alt="Xiamen University Malaysia" style={{ height: 24, width: "auto" }} />
-              Xiamen University Malaysia
-            </div>
           </div>
         </div>
 
         {/* Password card */}
         <div className="card">
           <h3>🔑 Change password</h3>
-
           <div className="set-field">
             <label htmlFor="set-curpw">Current password</label>
-            <PasswordInput
-              id="set-curpw"
-              className="set-input"
-              placeholder="••••••••"
-              value={curPw}
-              onChange={(e) => setCurPw(e.target.value)}
-            />
+            <PasswordInput id="set-curpw" className="set-input" value={curPw} onChange={(e) => setCurPw(e.target.value)} />
           </div>
           <div className="set-field">
             <label htmlFor="set-newpw">New password</label>
-            <PasswordInput
-              id="set-newpw"
-              className="set-input"
-              placeholder="8+ chars, 1 uppercase, 1 number, 1 symbol"
-              value={newPw}
-              onChange={(e) => setNewPw(e.target.value)}
-            />
+            <PasswordInput id="set-newpw" className="set-input" value={newPw} onChange={(e) => setNewPw(e.target.value)} />
           </div>
           <div className="set-field">
-            <label htmlFor="set-confirmpw">Confirm new password</label>
-            <PasswordInput
-              id="set-confirmpw"
-              className="set-input"
-              placeholder="Re-enter your password"
-              value={confirmPw}
-              onChange={(e) => setConfirmPw(e.target.value)}
-            />
+            <label htmlFor="set-confirmpw">Confirm</label>
+            <PasswordInput id="set-confirmpw" className="set-input" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} />
           </div>
-
-          <button className="btn btn-primary" onClick={changePw} disabled={savingPw}>
-            {savingPw ? "Changing…" : "Change password"}
-          </button>
-
-          {pwMsg.text && (
-            <div className="set-msg" style={{ color: pwMsg.ok ? "var(--green)" : "var(--coral)" }}>
-              {pwMsg.text}
-            </div>
-          )}
+          <button type="button" className="btn btn-primary" onClick={changePw} disabled={savingPw}>{savingPw ? "Changing…" : "Change password"}</button>
+          {pwMsg.text && <div className="set-msg" style={{ color: pwMsg.ok ? "var(--green)" : "var(--coral)" }}>{pwMsg.text}</div>}
         </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <h3>🤖 AI Coach settings</h3>
+        <p className="sub">Nag reminders use a global profile (separate from chat sessions).</p>
+
+        <div className="set-field">
+          <label>Nag coach profile</label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {profiles.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className={`btn btn-sm ${user?.nagProfileId === p.id ? "btn-primary" : "btn-ghost"}`}
+                onClick={() => setNagProfile(p.id)}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="set-field">
+          <label>
+            <input type="checkbox" checked={notifEnabled} onChange={toggleNotif} /> Enable automatic AI nags
+          </label>
+        </div>
+
+        {aiMsg.text && <div className="set-msg" style={{ color: aiMsg.ok ? "var(--green)" : "var(--coral)" }}>{aiMsg.text}</div>}
       </div>
     </section>
   );

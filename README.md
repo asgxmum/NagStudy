@@ -26,7 +26,6 @@ NagStudy/
 | .NET SDK | 10.0.x（目标框架 `net10.0`） | 运行时 / 编译目标 |
 | ASP.NET Core | 10.0 | Web API 框架 |
 | Microsoft.EntityFrameworkCore.SqlServer | 10.0.5 | ORM（用 C# 操作 SQL Server） |
-| Microsoft.EntityFrameworkCore.Tools | 10.0.5 | EF 迁移命令（`dotnet ef`） |
 | Microsoft.AspNetCore.Authentication.JwtBearer | 10.0.5 | JWT 令牌验证 |
 | Microsoft.AspNetCore.OpenApi | 10.0.5 | OpenAPI / Swagger 文档 |
 | **BCrypt.Net-Next** | **4.2.0** | **密码哈希（BCrypt）** |
@@ -89,13 +88,11 @@ dotnet user-secrets set "Admin:Password" "SWE310Admin@Team1"
 
 ### 3. 数据库
 
-```powershell
-# 在 NagStudy.API/ 目录下 —— 创建/升级表结构
-dotnet ef database update
-```
+**不需要 `dotnet ef` 迁移。** 第一次 `dotnet run` 时，app 会根据 `NagStudyContext` 里的实体**自动建表**（`EnsureCreated`），并写入管理员 + 内置 Coach 配置；Development 环境还会生成演示数据（幂等，已存在会跳过）。
 
-第一次在 Development 运行时，app 会自动生成 1 个管理员 + 5 个演示学生（幂等，已存在会跳过）。
-想清空重来：`dotnet ef database drop -f` → `dotnet ef database update` → 再运行。
+新增表：在 `Models/Domain/` 加实体 → `NagStudyContext` 加 `DbSet` → **删掉旧库或换库名** → 再 `dotnet run` 即可。
+
+想清空重来：在 SSMS 里删除 `NagStudyDb`（或 `DROP DATABASE NagStudyDb`），再运行 app。
 
 ### 4. 运行
 
@@ -259,6 +256,8 @@ NagStudy.API/
 │        UpdateProfileRequest / UpdateToneRequest
 ├─ Data/
 │  ├─ NagStudyContext.cs            EF DbContext（DbSet + 唯一索引 + 外键关系）
+│  ├─ DatabaseInitializer.cs        启动建表（EnsureCreated）+ 管理员种子
+│  ├─ ProfileSeeder.cs              内置 Coach 人设
 │  └─ DemoSeeder.cs                 开发环境演示数据（5 个学生 + 任务 + 专注记录）
 ├─ Services/
 │  └─ TokenService.cs               生成 JWT（写入 Sub/Email/Role/nickname claim）
@@ -266,7 +265,6 @@ NagStudy.API/
 │  └─ ClaimsPrincipalExtensions.cs  从 token 安全取 userId（LZH 新增）
 ├─ Infrastructure/
 │  └─ GlobalExceptionHandler.cs     全局异常 → 干净的 401/500（LZH 新增）
-└─ Migrations/                      EF 数据库迁移（自动生成，别手改）
 ```
 
 ### 前端 `NagStudy.Web/`

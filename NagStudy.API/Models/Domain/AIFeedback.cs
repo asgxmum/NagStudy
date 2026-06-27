@@ -14,5 +14,6 @@ public class AIFeedback
     public string? Tone { get; set; } //Soft/Normal/Harsh(If it is user message, is null)
 
     public string Content { get; set; } = string.Empty; //Message main text
+    public bool IsRead { get; set; }
     public DateTime CreatedAt { get; set; }
 }

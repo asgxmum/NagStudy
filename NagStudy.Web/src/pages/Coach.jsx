@@ -1,299 +1,527 @@
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { personas, todayMin, fmtDur } from "../data/mock";
 import { useAuth } from "../context/AuthContext";
-import api from "../api/client";
+import ProfilePickerModal from "../components/ProfilePickerModal";
+import {
+  listProfiles, listSessions, createSession, deleteSession, updateSessionTitle,
+  getMessages, sendChat, generateReport,
+} from "../api/coach";
+import { profileAvatar, userAvatarFromAuth } from "../utils/coachProfile";
+import CoachMessageBody from "../components/CoachMessageBody";
 
-// Reference screen: persona picker → two-way chat (W4 controlled input, W7 useEffect autoscroll).
-// Coach replies are mocked locally for now; later they'll come from the backend coach service.
-
-const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-
-// Persona art (public/) keyed by tone — replaces the emoji faces on the coach picker cards.
-const COACH_IMG = {
-  Soft: "/Healer.png",
-  Normal: "/Secretary.png",
-  Harsh: "/Elite.png",
-};
-const COACH_IMG_SIZE = 88; // same render height for all three so the cards look uniform
-
-// minutes-of-day "now" → "08:30" (chat timestamps, like the prototype's fmtT)
-function clockNow() {
-  const d = new Date();
+function formatMsgTime(msg) {
+  if (msg.time) return msg.time;
+  if (!msg.createdAt) return "";
+  const d = new Date(msg.createdAt);
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-// Persona-flavoured, data-aware reply. Ports the spirit of the prototype's coachReply():
-// a "tired" keyword branch + a few canned lines per tone, woven with today's focus minutes.
-// TODO: POST to api/coach/chat (SK+Gemini) — replace this local stub with the real coach call.
-function coachReply(userText, tone) {
-  const m = fmtDur(todayMin);
-  const tired = /tired|hard|exhaust|sleep|can'?t|burn|give up|quit/.test(
-    (userText || "").toLowerCase()
-  );
-  const lib = {
-    Soft: {
-      tired: [
-        `It's okay to feel that way 🌷 You've already focused ${m} today. Rest 5 min, then let's do the next one together?`,
-      ],
-      def: [
-        `I'm listening 💗 You're at ${m} today — that's great. Let's take the next small step together.`,
-        `No pressure 🌷 Just one tiny thing next? Starting is half the battle, and you've got this.`,
-      ],
-    },
-    Normal: {
-      tired: [`Logged: ${m} focus today. Rest is part of the plan. 10-min timer, then resume.`],
-      def: [
-        `Noted. Today: ${m} focused. Recommend proceeding with the next item.`,
-        `Bottom line: clear the oldest task first. Begin.`,
-      ],
-    },
-    Harsh: {
-      tired: [`Tired already? After only ${m}? First place is still at the desk. Up you get 👑`],
-      def: [
-        `Talk is cheap. Today's ${m} won't grow itself — start the next task, gracefully 👑`,
-        `How interesting. So — the next task now, or more excuses? 👑`,
-      ],
-    },
-  };
-  const set = lib[tone] || lib.Normal;
-  return pick(tired ? set.tired : set.def);
-}
-
-// Unprompted "Nag me now" lines — one set per tone, seeded with today's focus minutes.
-function nagText(tone) {
-  const m = fmtDur(todayMin);
-  const lib = {
-    Soft: [
-      `You've already focused for ${m} today — that's wonderful! 🌷 Let's do just one more together, okay?`,
-      `You're doing great 💗 How about a quick stretch before your next thing? Your body matters too.`,
-    ],
-    Normal: [
-      `Status report — ${m} focused today. Recommend starting with the oldest item. That is all.`,
-      `Today: ${m} focus logged. Next action pending. Proceed.`,
-    ],
-    Harsh: [
-      `Only ${m}, and already asking for attention? Bold. Your tasks won't do themselves 👑`,
-      `${m} today… not terrible. But first place is still studying right now 👑`,
-    ],
-  };
-  return pick(lib[tone] || lib.Normal);
-}
+const COACH_TOOLS = [
+  { id: "summary", label: "Summary", icon: "📊", desc: "Generate a study report" },
+];
 
 export default function Coach() {
-  const { user, updateUser } = useAuth();
-  // Start on the coach saved to the account (AiTone), so it matches the sidebar badge.
-  const [tone, setTone] = useState(user?.aiTone ?? personas[0].key);
+  const { user } = useAuth();
+  const [profiles, setProfiles] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [activeSession, setActiveSession] = useState(null);
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
   const [typing, setTyping] = useState(false);
-  // Toast shown when the active coach changes (portaled into AppLayout's #toast-root).
-  const [toast, setToast] = useState(null); // { id, face, name, color, out }
-
+  const [error, setError] = useState("");
+  const [showProfilePicker, setShowProfilePicker] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [toolMenuOpen, setToolMenuOpen] = useState(false);
+  const [reportPanelOpen, setReportPanelOpen] = useState(false);
+  const [reportPeriod, setReportPeriod] = useState("week");
+  const [reportLang, setReportLang] = useState("English");
+  const [profilesLoading, setProfilesLoading] = useState(false);
+  const [profilesError, setProfilesError] = useState("");
+  const [sessionMenu, setSessionMenu] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [renameTarget, setRenameTarget] = useState(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renameSaving, setRenameSaving] = useState(false);
   const logRef = useRef(null);
-  const activePersona = personas.find((p) => p.key === tone) ?? personas[0];
+  const toolMenuRef = useRef(null);
+  const sessionMenuRef = useRef(null);
 
-  // Switch coach + raise a "Coach switched" toast (skip if it's already the active one).
-  // Updates the shared user (so the sidebar badge changes instantly) and persists to the API.
-  function selectTone(p) {
-    if (p.key === tone) return;
-    setTone(p.key);
-    setToast({ id: Date.now(), img: COACH_IMG[p.key], name: p.name, color: p.color, out: false });
-    updateUser({ aiTone: p.key }); // optimistic — live-syncs the sidebar persona chip
-    api.put("/users/me/tone", { aiTone: p.key }).catch(() => {
-      // Persistence is best-effort here; the local UI already reflects the choice.
-    });
+  const userAvatar = userAvatarFromAuth(user);
+
+  async function loadProfiles() {
+    setProfilesLoading(true);
+    setProfilesError("");
+    try {
+      const r = await listProfiles();
+      setProfiles(Array.isArray(r.data) ? r.data : []);
+    } catch (e) {
+      setProfiles([]);
+      setProfilesError(e.response?.data?.message ?? "Couldn't load coach profiles. Is the API running?");
+    } finally {
+      setProfilesLoading(false);
+    }
   }
 
-  // Auto-dismiss the persona toast: hold ~2.4s, slide out, then unmount.
-  // Keyed on toast.id so flipping `out` to true doesn't restart the timers.
   useEffect(() => {
-    if (!toast) return;
-    const hold = setTimeout(() => setToast((t) => (t ? { ...t, out: true } : t)), 2400);
-    const drop = setTimeout(() => setToast(null), 2720);
-    return () => { clearTimeout(hold); clearTimeout(drop); };
-  }, [toast?.id]);
+    loadProfiles();
+    listSessions().then((r) => setSessions(r.data)).catch(() => {});
+  }, []);
 
-  // Autoscroll to newest message whenever the log or typing indicator changes.
   useEffect(() => {
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, typing]);
 
-  // Brief "…is typing", then append the coach reply.
   useEffect(() => {
-    if (!typing) return;
-    const id = setTimeout(() => {
-      setMessages((prev) => {
-        const lastUser = [...prev].reverse().find((msg) => msg.role === "user");
-        // TODO: POST to api/coach/chat (SK+Gemini) — generate the reply server-side here.
-        return [
-          ...prev,
-          { id: Date.now(), role: "coach", tone, text: coachReply(lastUser?.text, tone), time: clockNow() },
-        ];
-      });
-      setTyping(false);
-    }, 650);
-    return () => clearTimeout(id);
-  }, [typing, tone]);
+    if (!toolMenuOpen) return;
+    function onDocClick(e) {
+      if (toolMenuRef.current && !toolMenuRef.current.contains(e.target)) setToolMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [toolMenuOpen]);
 
-  function send() {
+  useEffect(() => {
+    if (!sessionMenu) return;
+    function onDocClick(e) {
+      if (sessionMenuRef.current && !sessionMenuRef.current.contains(e.target)) setSessionMenu(null);
+    }
+    function onKeyDown(e) {
+      if (e.key === "Escape") setSessionMenu(null);
+    }
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [sessionMenu]);
+
+  function assistantAvatar(session) {
+    if (!session) return profileAvatar(null);
+    return profileAvatar({ key: session.profileKey });
+  }
+
+  async function loadSession(session) {
+    setActiveSession(session);
+    setError("");
+    setReportPanelOpen(false);
+    try {
+      const res = await getMessages(session.id);
+      setMessages(res.data);
+    } catch {
+      setError("Couldn't load messages.");
+      setMessages([]);
+    }
+  }
+
+  function openSessionMenu(e, session) {
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    setSessionMenu({
+      session,
+      x: Math.min(rect.right - 8, window.innerWidth - 168),
+      y: Math.min(rect.bottom + 4, window.innerHeight - 96),
+    });
+  }
+
+  function startRenameSession(session) {
+    setSessionMenu(null);
+    setRenameTarget(session);
+    setRenameDraft(session.title);
+  }
+
+  function startDeleteSession(session) {
+    setSessionMenu(null);
+    setDeleteTarget(session);
+  }
+
+  async function confirmDeleteSession() {
+    if (!deleteTarget) return;
+    try {
+      await deleteSession(deleteTarget.id);
+      setSessions((prev) => prev.filter((s) => s.id !== deleteTarget.id));
+      if (activeSession?.id === deleteTarget.id) {
+        setActiveSession(null);
+        setMessages([]);
+      }
+      setError("");
+      setDeleteTarget(null);
+    } catch {
+      setError("Couldn't delete this chat.");
+      setDeleteTarget(null);
+    }
+  }
+
+  async function saveRenameSession() {
+    if (!renameTarget) return;
+    const title = renameDraft.trim();
+    if (!title) return;
+    setRenameSaving(true);
+    try {
+      const res = await updateSessionTitle(renameTarget.id, title);
+      const updated = res.data;
+      setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+      if (activeSession?.id === updated.id) setActiveSession(updated);
+      setRenameTarget(null);
+      setRenameDraft("");
+      setError("");
+    } catch (e) {
+      setError(e.response?.data?.message ?? "Couldn't rename this chat.");
+    } finally {
+      setRenameSaving(false);
+    }
+  }
+
+  function handleSessionContextMenu(e, session) {
+    openSessionMenu(e, session);
+  }
+
+  async function openProfilePicker() {
+    setShowProfilePicker(true);
+    await loadProfiles();
+  }
+
+  async function startNewChat(profileId) {
+    setShowProfilePicker(false);
+    try {
+      const res = await createSession(profileId);
+      const session = res.data;
+      setSessions((prev) => [session, ...prev]);
+      setActiveSession(session);
+      setMessages([]);
+      setReportPanelOpen(false);
+    } catch (e) {
+      setError(e.response?.data?.message ?? "Couldn't create session.");
+    }
+  }
+
+  function selectTool(toolId) {
+    setToolMenuOpen(false);
+    if (toolId === "summary") {
+      if (!activeSession) {
+        setError("Start or select a chat first.");
+        return;
+      }
+      setReportPanelOpen(true);
+    }
+  }
+
+  async function sendReport() {
+    if (!activeSession || typing) return;
+    setTyping(true);
+    setError("");
+    setReportPanelOpen(false);
+    const userLine = `[Report] ${reportPeriod} · ${reportLang}`;
+    setMessages((prev) => [...prev, { id: Date.now(), role: "User", messageType: "Report", content: userLine, createdAt: new Date().toISOString() }]);
+    try {
+      const res = await generateReport(activeSession.id, { period: reportPeriod, language: reportLang });
+      setMessages((prev) => [
+        ...prev,
+        { id: res.data.assistantMessageId, role: "Assistant", messageType: "Report", content: res.data.reply, createdAt: new Date().toISOString() },
+      ]);
+      listSessions().then((r) => setSessions(r.data)).catch(() => {});
+    } catch (e) {
+      setError(e.response?.data?.message ?? e.response?.data?.title ?? "Report failed.");
+    } finally {
+      setTyping(false);
+    }
+  }
+
+  async function sendChatMessage() {
+    if (!activeSession || typing) return;
     const text = draft.trim();
     if (!text) return;
-    setMessages((prev) => [...prev, { id: Date.now(), role: "user", text, time: clockNow() }]);
     setDraft("");
     setTyping(true);
+    setError("");
+    setMessages((prev) => [...prev, { id: Date.now(), role: "User", messageType: "Chat", content: text, createdAt: new Date().toISOString() }]);
+    try {
+      const res = await sendChat(activeSession.id, text);
+      setMessages((prev) => [
+        ...prev,
+        { id: res.data.assistantMessageId, role: "Assistant", messageType: "Chat", content: res.data.reply, createdAt: new Date().toISOString() },
+      ]);
+      listSessions().then((r) => setSessions(r.data)).catch(() => {});
+    } catch (e) {
+      setError(e.response?.data?.message ?? e.response?.data?.title ?? "Chat failed.");
+    } finally {
+      setTyping(false);
+    }
   }
 
-  function nagMe() {
-    setMessages((prev) => [
-      ...prev,
-      { id: Date.now(), role: "coach", tone, text: nagText(tone), time: clockNow() },
-    ]);
+  function copyReport(content) {
+    navigator.clipboard?.writeText(content).catch(() => {});
   }
 
-  // Toast lives outside the page flow — portal it into the shell's fixed #toast-root.
-  const toastRoot = typeof document !== "undefined" ? document.getElementById("toast-root") : null;
+  function handleComposerKey(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  }
 
   return (
-    <section className="view active" id="view-coach">
-      {toast && toastRoot &&
-        createPortal(
-          <div className={`toast${toast.out ? " out" : ""}`} style={{ borderLeftColor: toast.color }}>
-            <div className="ta">
-              <img src={toast.img} alt="" style={{ width: 32, height: 32, objectFit: "contain", display: "block" }} />
-            </div>
-            <div className="tc">
-              <div className="th">
-                <span className="tn2" style={{ color: toast.color }}>Coach switched</span>
-              </div>
-              <div className="tx">
-                <b>{toast.name}</b> is your coach now — say hi, or hit “Nag me now”.
-              </div>
-            </div>
-          </div>,
-          toastRoot
-        )}
-
-      <div className="view-head">
-        <h2> AI Coach</h2>
-        <p>
-          Pick your coach, then chat with them — it reads your data and replies in that character's
-          voice, in real time.
-        </p>
-      </div>
-
-      {/* Persona picker — clicking a card selects the active tone */}
-      <div className="char-grid" id="charGrid">
-        {personas.map((p) => (
-          <div
-            key={p.key}
-            className={`char-card ${tone === p.key ? "on" : ""}`}
-            onClick={() => selectTone(p)}
-          >
-            <div className="pick">✅</div>
-            <div className="face" style={{ height: 96, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <img
-                src={COACH_IMG[p.key] ?? COACH_IMG.Normal}
-                alt={p.name}
-                style={{ height: COACH_IMG_SIZE, width: "auto", objectFit: "contain" }}
-              />
-            </div>
-            <div className="nm">{p.name}</div>
-            <div className="ds">{p.desc}</div>
-            <span
-              className="tone-chip tn"
-              style={{ background: `${p.color}22`, color: p.color, borderColor: `${p.color}55` }}
-            >
-              {p.key}
-            </span>
+    <section className="view active coach-gemini-wrap" id="view-coach">
+      <div className={`coach-gemini${sidebarOpen ? "" : " sidebar-collapsed"}`}>
+        <aside className="coach-gemini-sidebar">
+          <div className="cgs-top">
+            <button type="button" className="cgs-icon-btn" onClick={() => setSidebarOpen((v) => !v)} title={sidebarOpen ? "Collapse" : "Expand"}>
+              {sidebarOpen ? "◀" : "▶"}
+            </button>
+            {sidebarOpen && <span className="cgs-brand">AI Coach</span>}
           </div>
-        ))}
-      </div>
+          <button
+            type="button"
+            className="cgs-new-btn"
+            onClick={openProfilePicker}
+            title="New chat"
+          >
+            <span className="cgs-new-icon">+</span>
+            {sidebarOpen && <span>New chat</span>}
+          </button>
+          <div className="cgs-session-list">
+            {sessions.map((s) => (
+              <div key={s.id} className={`cgs-session-row${activeSession?.id === s.id ? " active" : ""}`}>
+                <button
+                  type="button"
+                  className={`cgs-session-item${activeSession?.id === s.id ? " active" : ""}`}
+                  onClick={() => loadSession(s)}
+                  onContextMenu={(e) => handleSessionContextMenu(e, s)}
+                  title={sidebarOpen ? s.title : s.title}
+                >
+                  {sidebarOpen ? s.title : "💬"}
+                </button>
+                {sidebarOpen && (
+                  <button
+                    type="button"
+                    className="cgs-session-more"
+                    onClick={(e) => openSessionMenu(e, s)}
+                    title="Chat options"
+                    aria-label={`Options for ${s.title}`}
+                  >
+                    ⋯
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </aside>
 
-      <div
-        className="card"
-        style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}
-      >
-        <div style={{ fontSize: "13.5px", color: "var(--txt2)", flex: 1, minWidth: 200, fontWeight: 600 }}>
-          It reads your data (focus today · missed tasks · what's next) and nags you{" "}
-          <b style={{ color: "var(--txt)" }}>in your chosen character's voice</b>.
-        </div>
-        <button className="btn btn-primary" onClick={nagMe}>
-          💬 Nag me now
-        </button>
-      </div>
-
-      <div className="card">
-        <h3>
-          💬 Chat with your coach <span className="sub">real-time · logged as AIFeedback</span>
-        </h3>
-
-        {/* Scrollable message list */}
-        <div ref={logRef} id="chatLog" className="chat-log">
-          {messages.length === 0 ? (
-            <div className="chat-typing">
-              Talk to your coach — or hit "Nag me now" above for your first nag!
+        <div className="coach-gemini-main">
+          {!activeSession ? (
+            <div className="coach-gemini-empty">
+              <h3>Start a conversation</h3>
+              <p>Pick a past chat on the left, or create a <b>new chat</b> with an Agent Profile.</p>
             </div>
           ) : (
-            messages.map((msg) =>
-              msg.role === "user" ? (
-                <div key={msg.id} className="chat-row user">
-                  <div className="chat-av">🙂</div>
-                  <div className="chat-bubble">
-                    {msg.text}
-                    <div className="cbt" style={{ textAlign: "right" }}>
-                      {msg.time}
-                    </div>
+            <>
+              <header className="coach-gemini-header">
+                <img src={assistantAvatar(activeSession)} alt="" className="coach-gemini-header-av" />
+                <div className="coach-gemini-header-text">
+                  <div className="coach-gemini-header-title-row">
+                    <div className="coach-gemini-header-title">{activeSession.title}</div>
+                    <button
+                      type="button"
+                      className="coach-gemini-header-edit"
+                      onClick={() => startRenameSession(activeSession)}
+                      title="Rename chat"
+                      aria-label="Rename chat"
+                    >
+                      ✎
+                    </button>
                   </div>
+                  <div className="coach-gemini-header-sub">{activeSession.profileName}</div>
                 </div>
-              ) : (
-                <CoachRow key={msg.id} msg={msg} />
-              )
-            )
+              </header>
+
+              {error && <p className="coach-gemini-error">{error}</p>}
+
+              {reportPanelOpen && (
+                <div className="coach-gemini-tool-panel">
+                  <span className="coach-gemini-tool-label">📊 Summary report</span>
+                  <select className="set-input cgs-select" value={reportPeriod} onChange={(e) => setReportPeriod(e.target.value)}>
+                    <option value="week">This week</option>
+                    <option value="7days">Last 7 days</option>
+                    <option value="30days">Last 30 days</option>
+                  </select>
+                  <select className="set-input cgs-select" value={reportLang} onChange={(e) => setReportLang(e.target.value)}>
+                    <option value="English">English</option>
+                    <option value="Chinese">中文</option>
+                  </select>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={sendReport} disabled={typing}>Generate</button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setReportPanelOpen(false)}>Cancel</button>
+                </div>
+              )}
+
+              <div ref={logRef} className="coach-gemini-messages">
+                {messages.length === 0 && (
+                  <div className="coach-gemini-hint">Say hello to your coach — or use <b>+</b> for Summary / Schedule tools.</div>
+                )}
+                {messages.map((msg) =>
+                  msg.role === "User" ? (
+                    <div key={msg.id} className="cgm-row user">
+                      <div className="cgm-bubble">{msg.content}</div>
+                      <img src={userAvatar} alt="" className="cgm-av" />
+                    </div>
+                  ) : (
+                    <div key={msg.id} className="cgm-row assistant">
+                      <img src={assistantAvatar(activeSession)} alt="" className="cgm-av" />
+                      <div className="cgm-bubble">
+                        {msg.messageType === "Report" ? (
+                          <>
+                            <CoachMessageBody content={msg.content} variant="report" />
+                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => copyReport(msg.content)}>Copy</button>
+                          </>
+                        ) : (
+                          <CoachMessageBody content={msg.content} />
+                        )}
+                        <div className="cgm-time">{formatMsgTime(msg)}</div>
+                      </div>
+                    </div>
+                  )
+                )}
+                {typing && (
+                  <div className="cgm-row assistant">
+                    <img src={assistantAvatar(activeSession)} alt="" className="cgm-av" />
+                    <div className="cgm-typing">{activeSession.profileName} is typing…</div>
+                  </div>
+                )}
+              </div>
+            </>
           )}
 
-          {typing && (
-            <div className="chat-typing">{activePersona.name} is typing…</div>
-          )}
+          <footer className="coach-gemini-composer">
+            <div className="cgc-tools" ref={toolMenuRef}>
+              <button
+                type="button"
+                className="cgc-plus"
+                onClick={() => setToolMenuOpen((v) => !v)}
+                title="Tools"
+              >
+                +
+              </button>
+              {toolMenuOpen && (
+                <div className="cgc-tool-menu">
+                  {COACH_TOOLS.map((t) => (
+                    <button key={t.id} type="button" className="cgc-tool-item" onClick={() => selectTool(t.id)}>
+                      <span className="cgc-tool-icon">{t.icon}</span>
+                      <span>
+                        <strong>{t.label}</strong>
+                        <small>{t.desc}</small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <textarea
+              className="cgc-input"
+              rows={1}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={handleComposerKey}
+              placeholder={activeSession ? "Message your coach… (Enter to send)" : "Select or start a chat first"}
+              disabled={!activeSession || typing}
+            />
+            <button
+              type="button"
+              className="btn btn-primary cgc-send"
+              onClick={sendChatMessage}
+              disabled={!activeSession || typing || !draft.trim()}
+            >
+              Send
+            </button>
+          </footer>
         </div>
+      </div>
 
-        {/* Input + Send (Enter to send) */}
-        <div className="chat-input">
-          <input
-            id="chatInput"
-            type="text"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") send();
-            }}
-            placeholder="Talk to your coach…  (Enter)"
-          />
-          <button className="btn btn-primary btn-sm" onClick={send}>
-            Send
+      {showProfilePicker && createPortal(
+        <ProfilePickerModal
+          profiles={profiles}
+          loading={profilesLoading}
+          loadError={profilesError}
+          onRetry={loadProfiles}
+          onSelect={startNewChat}
+          onClose={() => setShowProfilePicker(false)}
+        />,
+        document.body
+      )}
+
+      {sessionMenu && createPortal(
+        <div
+          ref={sessionMenuRef}
+          className="cgs-context-menu"
+          style={{ top: sessionMenu.y, left: sessionMenu.x }}
+          role="menu"
+        >
+          <button type="button" className="cgs-context-item" onClick={() => startRenameSession(sessionMenu.session)}>
+            ✎ Rename
           </button>
-        </div>
-      </div>
-    </section>
-  );
-}
+          <button type="button" className="cgs-context-item danger" onClick={() => startDeleteSession(sessionMenu.session)}>
+            🗑 Delete
+          </button>
+        </div>,
+        document.body
+      )}
 
-// Coach bubble (left): persona face avatar + name, both tinted with the persona color.
-function CoachRow({ msg }) {
-  const p = personas.find((x) => x.key === msg.tone) ?? personas[0];
-  return (
-    <div className="chat-row coach">
-      <div className="chat-av" style={{ background: `${p.color}22` }}>
-        {p.face}
-      </div>
-      <div className="chat-bubble">
-        <div className="cbn" style={{ color: p.color }}>
-          {p.name}
-        </div>
-        {msg.text}
-        <div className="cbt">{msg.time}</div>
-      </div>
-    </div>
+      {deleteTarget && createPortal(
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal-card coach-dialog-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="coach-delete-title">
+            <h3 id="coach-delete-title">Delete chat?</h3>
+            <p className="sub coach-dialog-sub">
+              <span className="coach-dialog-highlight">「{deleteTarget.title}」</span>
+              will be permanently removed. This cannot be undone.
+            </p>
+            <div className="coach-dialog-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setDeleteTarget(null)}>Cancel</button>
+              <button type="button" className="btn btn-coral" onClick={confirmDeleteSession}>Delete</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {renameTarget && createPortal(
+        <div className="modal-overlay" onClick={() => !renameSaving && setRenameTarget(null)}>
+          <div className="modal-card coach-dialog-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="coach-rename-title">
+            <h3 id="coach-rename-title">Rename chat</h3>
+            <p className="sub coach-dialog-sub">Give this conversation a short, memorable title.</p>
+            <div className="set-field">
+              <label htmlFor="coach-rename-input">Title</label>
+              <input
+                id="coach-rename-input"
+                type="text"
+                className="set-input"
+                value={renameDraft}
+                maxLength={80}
+                autoFocus
+                disabled={renameSaving}
+                onChange={(e) => setRenameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    saveRenameSession();
+                  }
+                }}
+              />
+            </div>
+            <div className="coach-dialog-actions">
+              <button type="button" className="btn btn-ghost" disabled={renameSaving} onClick={() => setRenameTarget(null)}>Cancel</button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={renameSaving || !renameDraft.trim()}
+                onClick={saveRenameSession}
+              >
+                {renameSaving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </section>
   );
 }

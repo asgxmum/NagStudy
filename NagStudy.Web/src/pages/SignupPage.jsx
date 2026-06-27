@@ -50,7 +50,15 @@ export default function SignupPage() {
     setError("");
     try {
       const data = await register({ email, password, nickname });
-      login(data.token, { email: data.email, nickname: data.nickname, role: data.role, aiTone: data.aiTone });
+      login(data.token, {
+        email: data.email,
+        nickname: data.nickname,
+        role: data.role,
+        aiTone: data.aiTone,
+        nagProfileId: data.nagProfileId,
+        nagProfileName: data.nagProfileName,
+        nagProfileKey: data.nagProfileKey,
+      });
       navigate(data.role === "Admin" ? "/admin" : "/app");
     } catch (err) {
       setError(err.response?.data?.message ?? "Sign up failed. Try again.");
