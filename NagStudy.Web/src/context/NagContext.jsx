@@ -77,11 +77,20 @@ export function NagProvider({ children }) {
       showingRef.current = false;
       setActiveNag(null);
     }
+    // User-initiated nags (e.g. "Nag me") hit the LLM and take a few seconds —
+    // show a loading bubble immediately so the tap feels responsive.
+    const userInitiated = trigger === "Manual" || options.forceShow;
+    if (userInitiated) {
+      showingRef.current = true;
+      setActiveNag({ trigger, loading: true });
+    }
     try {
       const res = await triggerNag(trigger, buildTriggerPayload(trigger, options));
-      showFromResponse(trigger, res.data);
+      const shown = showFromResponse(trigger, res.data);
+      if (!shown && userInitiated) { setActiveNag(null); showingRef.current = false; }
       return res.data;
     } catch {
+      if (userInitiated) { setActiveNag(null); showingRef.current = false; }
       return null;
     }
   }, [showFromResponse, buildTriggerPayload]);

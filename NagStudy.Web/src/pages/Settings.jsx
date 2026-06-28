@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import PasswordInput from "../components/PasswordInput";
@@ -24,10 +25,18 @@ export default function Settings() {
 
   const [aiMsg, setAiMsg] = useState({ text: "", ok: false });
   const [notifEnabled, setNotifEnabled] = useState(user?.aiNotificationsEnabled !== false);
+  const toastRoot = typeof document !== "undefined" ? document.getElementById("toast-root") : null;
 
   useEffect(() => {
     listProfiles().then((r) => setProfiles(r.data)).catch(() => {});
   }, []);
+
+  // Auto-dismiss the AI settings status message so it doesn't stick around forever.
+  useEffect(() => {
+    if (!aiMsg.text) return;
+    const t = setTimeout(() => setAiMsg({ text: "", ok: false }), 1200);
+    return () => clearTimeout(t);
+  }, [aiMsg]);
 
   async function saveNick() {
     const v = nickname.trim();
@@ -172,7 +181,16 @@ export default function Settings() {
           </label>
         </div>
 
-        {aiMsg.text && <div className="set-msg" style={{ color: aiMsg.ok ? "var(--green)" : "var(--coral)" }}>{aiMsg.text}</div>}
+        {aiMsg.text && toastRoot && createPortal(
+          <div className="toast" style={{ borderLeftColor: aiMsg.ok ? "var(--green)" : "var(--coral)" }}>
+            <div className="ta">{aiMsg.ok ? "✅" : "⚠️"}</div>
+            <div className="tc">
+              <div className="th"><span className="tn2" style={{ color: aiMsg.ok ? "var(--green)" : "var(--coral)" }}>{aiMsg.ok ? "Updated" : "Error"}</span></div>
+              <div className="tx">{aiMsg.text.replace(/^[✅⚠️]\s*/, "")}</div>
+            </div>
+          </div>,
+          toastRoot
+        )}
       </div>
     </section>
   );

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { TASK_COLORS, isPresetTaskColor } from "../utils/taskColor";
-import { todayMytStr, fmtTime, classifyFromForm } from "../utils/taskMapper";
+import { todayMytStr, classifyFromForm } from "../utils/taskMapper";
 
 const emptyForm = () => ({
   title: "",
@@ -16,10 +16,64 @@ const emptyForm = () => ({
 
 function placementMeta(dateStr, startMin) {
   const c = classifyFromForm({ dateStr, startMin });
-  if (!dateStr?.trim()) return { icon: "📦", label: "Backlog", tone: "backlog" };
+  if (!dateStr?.trim()) return { icon: "📦", label: "Backlog · no date", tone: "nodate" };
   if (c.isBacklog) return { icon: "📦", label: "Backlog · future", tone: "backlog" };
   if (startMin !== "") return { icon: "🗓️", label: "Today · Scheduled", tone: "gantt" };
   return { icon: "📋", label: "Today", tone: "today" };
+}
+
+// 12-hour time picker (1–12 : minute : AM/PM). Stores minutes-since-midnight,
+// so the backend/Gantt are unaffected. Replaces the native <input type="time">,
+// whose 12h/24h display Chrome controls by browser locale (ignores `lang`).
+const HOURS_12 = Array.from({ length: 12 }, (_, i) => i + 1); // 1..12
+const MINUTES = Array.from({ length: 60 }, (_, i) => i);      // 0..59
+
+function minToParts(min) {
+  if (min === "" || min == null) return { h: "", m: "", ap: "AM" };
+  const h24 = Math.floor(min / 60);
+  return { h: String(h24 % 12 || 12), m: String(min % 60), ap: h24 < 12 ? "AM" : "PM" };
+}
+function partsToMin(h, m, ap) {
+  if (h === "") return "";
+  const h12 = Number(h);
+  const h24 = ap === "AM" ? (h12 === 12 ? 0 : h12) : (h12 === 12 ? 12 : h12 + 12);
+  return h24 * 60 + (m === "" ? 0 : Number(m)); // minute defaults to :00 once hour is set
+}
+
+function Time12({ id, value, onChange }) {
+  const [h, setH] = useState("");
+  const [m, setM] = useState("");
+  const [ap, setAp] = useState("AM");
+
+  useEffect(() => {
+    const p = minToParts(value);
+    setH(p.h); setM(p.m); setAp(p.ap);
+  }, [value]);
+
+  const emit = (nh, nm, nap) => onChange(partsToMin(nh, nm, nap));
+  const two = (n) => String(n).padStart(2, "0");
+  const sel = { border: "none", background: "transparent", outline: "none", font: "inherit", color: "inherit", cursor: "pointer", padding: "2px 0" };
+
+  return (
+    <div className="set-input task-time12" style={{ display: "inline-flex", alignItems: "center", gap: 2, padding: "6px 10px" }}>
+      <select id={id} style={sel} value={h}
+        onChange={(e) => { setH(e.target.value); emit(e.target.value, m, ap); }}>
+        <option value="">--</option>
+        {HOURS_12.map((x) => <option key={x} value={x}>{two(x)}</option>)}
+      </select>
+      <span style={{ opacity: 0.5 }}>:</span>
+      <select style={sel} value={m} aria-label="Minute"
+        onChange={(e) => { setM(e.target.value); emit(h, e.target.value, ap); }}>
+        <option value="">--</option>
+        {MINUTES.map((x) => <option key={x} value={x}>{two(x)}</option>)}
+      </select>
+      <select style={{ ...sel, marginLeft: 6 }} value={ap} aria-label="AM/PM"
+        onChange={(e) => { setAp(e.target.value); emit(h, m, e.target.value); }}>
+        <option value="AM">AM</option>
+        <option value="PM">PM</option>
+      </select>
+    </div>
+  );
 }
 
 export default function TaskPopover({ task, onSave, onDelete, onClose }) {
@@ -139,37 +193,18 @@ export default function TaskPopover({ task, onSave, onDelete, onClose }) {
                 onChange={(e) => setField("dateStr", e.target.value)}
               />
               {dateError && <p className="task-field-error">{dateError}</p>}
+              {!form.dateStr && !dateError && (
+                <p className="sub" style={{ marginTop: 6 }}>📦 No date = saved for later (Backlog)</p>
+              )}
             </div>
             <div className="task-time-row">
               <div className="set-field">
                 <label htmlFor="task-start">Start</label>
-                <input
-                  id="task-start"
-                  type="time"
-                  lang="en-GB"
-                  className="set-input task-time-input"
-                  value={form.startMin === "" ? "" : fmtTime(form.startMin)}
-                  onChange={(e) => {
-                    if (!e.target.value) { setField("startMin", ""); return; }
-                    const [h, m] = e.target.value.split(":").map(Number);
-                    setField("startMin", h * 60 + m);
-                  }}
-                />
+                <Time12 id="task-start" value={form.startMin} onChange={(v) => setField("startMin", v)} />
               </div>
               <div className="set-field">
                 <label htmlFor="task-end">End</label>
-                <input
-                  id="task-end"
-                  type="time"
-                  lang="en-GB"
-                  className="set-input task-time-input"
-                  value={form.endMin === "" ? "" : fmtTime(form.endMin)}
-                  onChange={(e) => {
-                    if (!e.target.value) { setField("endMin", ""); return; }
-                    const [h, m] = e.target.value.split(":").map(Number);
-                    setField("endMin", h * 60 + m);
-                  }}
-                />
+                <Time12 id="task-end" value={form.endMin} onChange={(v) => setField("endMin", v)} />
               </div>
             </div>
           </section>

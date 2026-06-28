@@ -19,7 +19,7 @@ const TRIGGER_LABELS = {
 export default function NagBubble({ nag, persona, onDismiss, onTaskDone, busy }) {
   if (!nag) return null;
 
-  const label = TRIGGER_LABELS[nag.trigger] ?? nag.trigger;
+  const label = nag.loading ? "Writing…" : (TRIGGER_LABELS[nag.trigger] ?? nag.trigger);
   const accent = persona.color ?? "#2C3E63";
 
   return createPortal(
@@ -42,9 +42,15 @@ export default function NagBubble({ nag, persona, onDismiss, onTaskDone, busy })
           <button type="button" className="nag-live-close" onClick={onDismiss} aria-label="Dismiss">✕</button>
         </header>
         <div className="nag-live-content">
-          <CoachMessageBody content={nag.message} />
+          {nag.loading ? (
+            <p style={{ margin: 0, fontStyle: "italic", opacity: 0.85 }}>
+              {persona.name} is writing your nag… <span className="nag-live-dots">●●●</span>
+            </p>
+          ) : (
+            <CoachMessageBody content={nag.message} />
+          )}
         </div>
-        {nag.showTaskActions && (
+        {!nag.loading && nag.showTaskActions && (
           <footer className="nag-live-actions">
             <button type="button" className="nag-live-btn nag-live-btn--done" disabled={busy} onClick={() => onTaskDone?.(true)}>
               Done

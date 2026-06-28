@@ -44,6 +44,17 @@ button {
   }
 }
 
+@keyframes nagDots {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+.nag-live-dots {
+  display: inline-block;
+  letter-spacing: 2px;
+  animation: nagDots 1s ease-in-out infinite;
+}
+
 @keyframes fly {
 
   0%,
@@ -5948,6 +5959,12 @@ button {
   border: 1px solid rgba(110, 137, 190, 0.22);
 }
 
+.task-place-pill.tone-nodate {
+  background: rgba(120, 122, 134, 0.12);
+  color: #6b6d7a;
+  border: 1px dashed rgba(120, 122, 134, 0.34);
+}
+
 .task-place-pill.tone-today {
   background: rgba(91, 160, 110, 0.14);
   color: #3d7350;
@@ -7226,6 +7243,13 @@ button {
   flex-shrink: 0;
   border-radius: 22px;
   padding: 11px 20px;
+}
+
+.cgc-plus:disabled,
+.cgc-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 @media (max-width: 768px) {

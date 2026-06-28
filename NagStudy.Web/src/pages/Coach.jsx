@@ -270,7 +270,7 @@ export default function Coach() {
             <button type="button" className="cgs-icon-btn" onClick={() => setSidebarOpen((v) => !v)} title={sidebarOpen ? "Collapse" : "Expand"}>
               {sidebarOpen ? "◀" : "▶"}
             </button>
-            {sidebarOpen && <span className="cgs-brand">AI Coach</span>}
+            {sidebarOpen && <span className="cgs-brand">Recents</span>}
           </div>
           <button
             type="button"
@@ -282,6 +282,12 @@ export default function Coach() {
             {sidebarOpen && <span>New chat</span>}
           </button>
           <div className="cgs-session-list">
+            {sidebarOpen && sessions.length === 0 && (
+              <div className="sub" style={{ textAlign: "center", padding: "36px 16px", lineHeight: 1.6 }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>💬</div>
+                No chats yet.<br />Tap <b>+ New chat</b> to begin.
+              </div>
+            )}
             {sessions.map((s) => (
               <div key={s.id} className={`cgs-session-row${activeSession?.id === s.id ? " active" : ""}`}>
                 <button
@@ -312,8 +318,11 @@ export default function Coach() {
         <div className="coach-gemini-main">
           {!activeSession ? (
             <div className="coach-gemini-empty">
-              <h3>Start a conversation</h3>
-              <p>Pick a past chat on the left, or create a <b>new chat</b> with an Agent Profile.</p>
+              <h3>👋 Meet your study coach</h3>
+              <p>Start a chat and pick a coach personality — they'll nag, cheer, or report based on your real study data.</p>
+              <button type="button" className="btn btn-primary" onClick={openProfilePicker} style={{ marginTop: 14 }}>
+                ＋ Start a new chat
+              </button>
             </div>
           ) : (
             <>
@@ -398,7 +407,8 @@ export default function Coach() {
                 type="button"
                 className="cgc-plus"
                 onClick={() => setToolMenuOpen((v) => !v)}
-                title="Tools"
+                title={activeSession ? "Tools" : "Start a chat first"}
+                disabled={!activeSession}
               >
                 +
               </button>
@@ -416,15 +426,26 @@ export default function Coach() {
                 </div>
               )}
             </div>
-            <textarea
-              className="cgc-input"
-              rows={1}
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={handleComposerKey}
-              placeholder={activeSession ? "Message your coach… (Enter to send)" : "Select or start a chat first"}
-              disabled={!activeSession || typing}
-            />
+            {activeSession ? (
+              <textarea
+                className="cgc-input"
+                rows={1}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={handleComposerKey}
+                placeholder="Message your coach… (Enter to send)"
+                disabled={typing}
+              />
+            ) : (
+              <button
+                type="button"
+                className="cgc-input"
+                onClick={openProfilePicker}
+                style={{ textAlign: "left", color: "#9aa0ab", cursor: "pointer", background: "transparent" }}
+              >
+                ＋ Start a new chat to begin →
+              </button>
+            )}
             <button
               type="button"
               className="btn btn-primary cgc-send"
