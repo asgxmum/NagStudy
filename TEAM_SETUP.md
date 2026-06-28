@@ -2,6 +2,19 @@
 
 合并 `temp` 到本地后，按顺序做一次即可跑通 AI / Coach / Trigger 功能。
 
+## 0. .NET SDK 版本（⚠️ 先看这条，否则所有 `dotnet` 命令会报错）
+
+`global.json` 锁定了 SDK 版本。如果本机没有对应版本，`dotnet user-secrets` / `dotnet run` 会报
+`A compatible .NET SDK was not found … Requested SDK version: 10.0.xxx`。
+
+两种解决办法，任选其一：
+
+- **（推荐）改 `global.json` 成自己装的版本**：用 `dotnet --list-sdks` 看本机版本，把
+  `global.json` 里的 `"version"` 改成那个号（例如本机是 `10.0.201` 就写 `10.0.201`）。
+- 或者去 <https://dotnet.microsoft.com/download> 装 `global.json` 要求的那个 SDK。
+
+> 当前仓库里 `global.json` 已设为 `10.0.201`。装了更高版本也能跑（`rollForward: latestFeature`）。
+
 ## 1. 拉分支
 
 ```powershell

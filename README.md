@@ -52,7 +52,10 @@ NagStudy/
 
 ## ✅ 环境要求
 
-- **.NET 10 SDK**
+- **.NET 10 SDK** —— ⚠️ 注意 `global.json` 锁定了具体版本（当前为 `10.0.201`）。
+  若 `dotnet` 命令报 `A compatible .NET SDK was not found … Requested SDK version: 10.0.xxx`，
+  说明本机版本对不上：用 `dotnet --list-sdks` 看本机版本，把 `global.json` 里的 `"version"`
+  改成那个号，或安装它要求的 SDK。装了更高版本也能跑（`rollForward: latestFeature`）。
 - **Node.js 18+**（前端）
 - **SQL Server**（LocalDB / Express / 完整版都行，Windows 身份验证可连）
 
@@ -218,6 +221,32 @@ git pull origin main             # 把最新 main 合进你的分支（不是反
 - **遇到的报错 / 为什么改**：PR #2 合并时 README「变更记录」处有冲突（ZK 的 6.25 与 LZH 的 6.23 加在同一位置）—— 已保留两条、按时间排序解决。另：本地实测时遇到 `5178 address already in use`，原因是 zip 文件夹（`NagStudy-feat-admin-frontend`）里残留的旧后端进程占用端口，杀掉即可，与代码无关。
 - **已验证**：`main` 后端 `dotnet build` 0 警告 0 错误；本地启动后用 admin 账号登录、`/admin/stats`、`/admin/users`、Ban/Unban/Delete 均正常。
 - **还没解决的**：暂无。请大家 `git pull origin main` 拿最新版；以后**别在 zip 文件夹里运行**，统一在 `d:\...\NagStudy\` 主仓库里跑。
+
+### 6.28 · LZH（解决 / 修复 temp 分支问题）
+
+> 在 `temp` 分支（Aric 的 AI Coach 全栈功能）上本地测试，修复了一批环境与前端 UI/UX 问题。
+
+- **改了什么（环境 / 能跑起来）**：
+  - `global.json`：SDK `10.0.301` → `10.0.201`（本机没装 301，所有 `dotnet` 命令报 "compatible SDK not found"）。
+  - `appsettings.json`：连接字符串 `YOUR_SQL_SERVER` → `AngelLee`（本机实例）。
+  - `TEAM_SETUP.md` / `README.md`：补充 **SDK 版本说明**，避免别人 pull 下来卡同样的坑。
+- **改了什么（前端 UI/UX）**：
+  - `TaskPopover.jsx`：时间输入从原生 `<input type=time>` 改为 **12 小时自定义选择器（1–12 : 分 : AM/PM）**（Chrome 忽略 `lang`，无法强制 24h）；新增 `Backlog · no date` 标签 + 灰色虚线 pill；加「No date = saved for later」提示。
+  - `Tasks.jsx`：新增 **`Brain Dump · To-Do`** 区块标题。
+  - `Dashboard.jsx`：周图表 **显示完整周一~周日**（原来只显示有数据的那天）；**删除 Y 轴 + 柱顶直接标值**（如 "1h 15m"）。
+  - `Coach.jsx`：无会话时输入框变成 **「＋ Start a new chat」CTA**；空状态加 **「Meet your study coach」+ 开始按钮**；侧栏标题 **"AI Coach" → "Recents"**；空列表居中 + 图标；无会话时 `+` / `Send` 按钮 **置灰禁用**。
+  - `NagContext.jsx` / `NagBubble.jsx`：点 Nag me 后 **立即显示加载气泡**（"is writing…"），AI 返回再替换，避免 6 秒空白。
+  - `Settings.jsx` / `index.html`：教练切换提示从内联文字改为 **toast 弹窗**（1.2s 自动消失）；补上缺失的 `#toast-root` 元素 —— **顺带修好了 Tasks 页本来无法显示的错误 toast**。
+- **遇到的报错 / 为什么改**：
+  - `Invalid object name 'AgentProfiles'`：旧 `NagStudyDb` 缺 Coach 新表 → 删库重建（EnsureCreated 会跳过已存在的库）。
+  - 数据「消失」+ 保存要点好几次 + AI 慢：根因都是 **本地 SQL Server 过载**（单条 INSERT 一度要 35 秒）→ 重启 SQL Server（`Restart-Service MSSQLSERVER -Force`，需管理员）后恢复（INSERT 0.24s）。
+  - AI 报「Gemini is temporarily unavailable」/ 出现 "Keep going" 兜底语：是 **Gemini 免费额度 429 限流**（测试时请求太密集），等一会儿 + 关掉「自动 AI 唠叨」即可。
+- **还没解决的（留给 Aric）**：
+  - **过去日期的未完成任务会从看板消失**（Today/Backlog/Gantt 三个桶都不匹配）——需在 `TaskTimeHelper.cs` + `taskMapper.js` 的 `splitBoard` 各加一条「过去 + 未完成 → 显示在 Today（overdue）」。
+  - Coach **每条消息开多个 DB 连接** + RAG 后台调用，本地易过载；建议每次对话共用一个 DbContext。
+  - Coach 响应 ~6s，建议做 **流式输出**。
+  - `Microsoft.SemanticKernel.Core 1.64.0` 有已知漏洞（NU1904），建议升级。
+- **注意**：以上修改目前只在 **本地 temp 文件夹**，尚未提交到 `origin/temp`。
 
 ### 📋 模板（复制这段写你自己的）
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
-  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell,
+  ResponsiveContainer, BarChart, Bar, XAxis, Tooltip, LabelList, PieChart, Pie, Cell,
 } from "recharts";
 import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
@@ -73,7 +73,12 @@ export default function Dashboard() {
   }, []);
 
   const weekly = useMemo(
-    () => (data?.byDay ?? []).map((d) => ({ day: dayLabel(d.date), min: Math.round(d.seconds / 60) })),
+    () => {
+      // Always render the full Mon–Sun week (resets Mon 00:00 MYT); fill empty days with 0.
+      const byLabel = {};
+      (data?.byDay ?? []).forEach((d) => { byLabel[dayLabel(d.date)] = Math.round(d.seconds / 60); });
+      return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => ({ day, min: byLabel[day] ?? 0 }));
+    },
     [data]
   );
   const categoryMix = useMemo(
@@ -151,15 +156,16 @@ export default function Dashboard() {
 
       <div className="grid-2">
         <div className="card">
-          <h3>📊 This week&apos;s focus <span className="sub">minutes per day</span></h3>
+          <h3>📊 This week&apos;s focus <span className="sub">focus per day</span></h3>
           <div className="chart" style={{ height: 200, display: "block", padding: 0 }}>
             {weekTotal > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={weekly} margin={{ top: 16, right: 4, bottom: 0, left: -16 }}>
+                <BarChart data={weekly} margin={{ top: 24, right: 8, bottom: 0, left: 8 }}>
                   <XAxis dataKey="day" tick={{ fill: "#9AA0B0", fontSize: 11.5, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: "#9AA0B0", fontSize: 11.5 }} axisLine={false} tickLine={false} width={40} />
                   <Tooltip cursor={{ fill: "rgba(232,115,74,0.08)" }} contentStyle={TOOLTIP_STYLE} itemStyle={TOOLTIP_ITEM} formatter={(value) => [fmtDur(value), "Focus"]} />
-                  <Bar dataKey="min" fill="#E8734A" radius={[9, 9, 4, 4]} />
+                  <Bar dataKey="min" fill="#E8734A" radius={[9, 9, 4, 4]}>
+                    <LabelList dataKey="min" position="top" formatter={(v) => (v ? fmtDur(v) : "")} fill="#2C3E63" fontSize={11.5} fontWeight={700} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             ) : (

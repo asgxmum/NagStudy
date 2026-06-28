@@ -366,6 +366,7 @@ export default function Tasks() {
         )}
 
         <div className="card tasks-top-panel">
+          <h3>Brain Dump · To-Do</h3>
           <div className="tasks-top-actions">
             <button type="button" className="btn btn-primary btn-sm" onClick={() => setPopover({ ...NEW_TASK, color: TASK_COLORS[0] })}>+ Add task</button>
           </div>
