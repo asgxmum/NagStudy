@@ -1,0 +1,1 @@
+export const TOUR_PAGES = ["dashboard", "tasks", "pomodoro", "coach", "ranking", "settings"];
