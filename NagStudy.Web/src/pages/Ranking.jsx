@@ -1,76 +1,104 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../api/client";
+import { useTour } from "../context/useTour";
+import introJs from "intro.js";
+import "intro.js/introjs.css";
 
 // 🏆 Weekly ranking — real data from /api/ranking (single-school leaderboard).
 const medal = (i) => (i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`);
 
 // Backend returns seconds → show as minutes / hours.
 const fmtDur = (secs) => {
-  const m = Math.round(secs / 60);
-  const h = Math.floor(m / 60);
-  return h > 0 ? `${h}h ${m % 60}m` : `${m}m`;
+    const m = Math.round(secs / 60);
+    const h = Math.floor(m / 60);
+    return h > 0 ? `${h}h ${m % 60}m` : `${m}m`;
 };
 
 export default function Ranking() {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+    const [rows, setRows] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+    const navigate = useNavigate();
+    const { active, currentPage, nextPage, endTour } = useTour();
+    const tourStartedRef = useRef(false);
+    const rankTabsRef = useRef(null);
 
-  // Fetch once when the screen mounts.
-  useEffect(() => {
-    api.get("/ranking")
-      .then((res) => setRows(res.data))
-      .catch(() => setError("Couldn't load the ranking."))
-      .finally(() => setLoading(false));
-  }, []);
+    useEffect(() => {
+        if (!active || currentPage !== "ranking") return;
+        if (!rankTabsRef.current) return;
+        if (tourStartedRef.current) return;
+        tourStartedRef.current = true;
 
-  // Top scorer sets the 100% reference for every progress bar.
-  const topSecs = rows[0]?.totalSeconds || 1;
+        const intro = introJs();
+        intro.setOptions({
+            steps: [
+                { element: ".rank-tabs", intro: "You\'re competing within <b>Xiamen University Malaysia</b>. Rankings reset every Monday.", title: "School Ranking" },
+                { element: "#rankList", intro: "The leaderboard ranks students by <b>total focus minutes</b> this week. Study more to climb up!", title: "Leaderboard" },
+            ],
+            nextLabel: "Next →", prevLabel: "← Back", doneLabel: "Next page →",
+            skipLabel: "Skip tour", showProgress: true, showBullets: false, exitOnOverlayClick: false,
+        });
+        let completed = false;
+        intro.oncomplete(() => { completed = true; nextPage(); setTimeout(() => navigate("/app/settings"), 200); });
+        intro.onexit(() => { if (!completed) endTour(); });
+        intro.start();
+    }, [active, currentPage, rankTabsRef.current]);
 
-  return (
-    <section className="view active" id="view-rank">
-      <div className="view-head">
-        <h2> Ranking</h2>
-        <p>
-          Rank up against your schoolmates this week — by total <b>focus minutes</b>. Every session counts.
-        </p>
-      </div>
+    // Fetch once when the screen mounts.
+    useEffect(() => {
+        api.get("/ranking")
+            .then((res) => setRows(res.data))
+            .catch(() => setError("Couldn't load the ranking."))
+            .finally(() => setLoading(false));
+    }, []);
 
-      <div className="rank-tabs">
-        <span className="rank-tab on" style={{ cursor: "default" }}>
-          Xiamen University Malaysia
-        </span>
-        <span className="rank-reset">⏳ resets Mon 00:00 (MYT) · this week</span>
-      </div>
+    // Top scorer sets the 100% reference for every progress bar.
+    const topSecs = rows[0]?.totalSeconds || 1;
 
-      <div className="card">
-        {loading && <p>Loading…</p>}
-        {error && <p style={{ color: "#E8734A", fontWeight: 700 }}>{error}</p>}
+    return (
+        <section className="view active" id="view-rank">
+            <div className="view-head">
+                <h2> Ranking</h2>
+                <p>
+                    Rank up against your schoolmates this week — by total <b>focus minutes</b>. Every session counts.
+                </p>
+            </div>
 
-        {!loading && !error && (
-          <div id="rankList">
-            {rows.map((p, i) => (
-              <div className={`rank-li ${p.isMe ? "me" : ""}`} key={p.id}>
-                <div className="rk">{medal(i)}</div>
-                <div className="info">
-                  <div className="rnm">
-                    {p.nickname} {p.isMe && <span className="you">YOU</span>}
-                  </div>
-                  <div className="rbar">
-                    <i style={{ width: `${Math.min((p.totalSeconds / topSecs) * 100, 100)}%` }} />
-                  </div>
-                </div>
-                <div className="rv">
-                  {fmtDur(p.totalSeconds)}
-                  <small>this week</small>
-                </div>
-              </div>
-            ))}
-            {rows.length === 0 && <p>No sessions yet this week.</p>}
-          </div>
-        )}
-      </div>
-    </section>
-  );
+            <div className="rank-tabs" ref={rankTabsRef}>
+                <span className="rank-tab on" style={{ cursor: "default" }}>
+                    Xiamen University Malaysia
+                </span>
+                <span className="rank-reset">⏳ resets Mon 00:00 (MYT) · this week</span>
+            </div>
+
+            <div className="card">
+                {loading && <p>Loading…</p>}
+                {error && <p style={{ color: "#E8734A", fontWeight: 700 }}>{error}</p>}
+
+                {!loading && !error && (
+                    <div id="rankList">
+                        {rows.map((p, i) => (
+                            <div className={`rank-li ${p.isMe ? "me" : ""}`} key={p.id}>
+                                <div className="rk">{medal(i)}</div>
+                                <div className="info">
+                                    <div className="rnm">
+                                        {p.nickname} {p.isMe && <span className="you">YOU</span>}
+                                    </div>
+                                    <div className="rbar">
+                                        <i style={{ width: `${Math.min((p.totalSeconds / topSecs) * 100, 100)}%` }} />
+                                    </div>
+                                </div>
+                                <div className="rv">
+                                    {fmtDur(p.totalSeconds)}
+                                    <small>this week</small>
+                                </div>
+                            </div>
+                        ))}
+                        {rows.length === 0 && <p>No sessions yet this week.</p>}
+                    </div>
+                )}
+            </div>
+        </section>
+    );
 }
-

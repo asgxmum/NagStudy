@@ -1,0 +1,130 @@
+/* ©¤©¤ NagStudy Tour Styles ©¤©¤ */
+
+/* Overlay */
+.introjs-overlay {
+    background: rgba(20, 45, 55, 0.78) !important;
+    backdrop-filter: blur(2px);
+}
+
+/* Tooltip box */
+.introjs-tooltip {
+    background: #fff !important;
+    border-radius: 16px !important;
+    box-shadow: 0 12px 40px rgba(27, 33, 80, 0.18) !important;
+    border: none !important;
+    padding: 24px !important;
+    min-width: 300px !important;
+    max-width: 360px !important;
+    font-family: var(--font-body, 'Inter', sans-serif) !important;
+}
+
+/* Arrow */
+.introjs-arrow.top {
+    border-bottom-color: #fff !important;
+}
+
+.introjs-arrow.bottom {
+    border-top-color: #fff !important;
+}
+
+.introjs-arrow.left {
+    border-right-color: #fff !important;
+}
+
+.introjs-arrow.right {
+    border-left-color: #fff !important;
+}
+
+/* Title */
+.introjs-tooltip-title {
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    color: #2C3E63 !important;
+    margin-bottom: 8px !important;
+    font-family: var(--font-disp, 'Sora', sans-serif) !important;
+}
+
+/* Content text */
+.introjs-tooltiptext {
+    font-size: 14px !important;
+    color: #5a6282 !important;
+    line-height: 1.6 !important;
+    margin-bottom: 0 !important;
+}
+
+/* Buttons row */
+.introjs-tooltipbuttons {
+    border-top: 1px solid #f0f1f5 !important;
+    padding-top: 16px !important;
+    margin-top: 16px !important;
+    display: flex !important;
+    gap: 8px !important;
+    align-items: center !important;
+}
+
+/* Hide Back button */
+.introjs-prevbutton {
+    display: none !important;
+}
+
+/* Next / Done button */
+.introjs-nextbutton {
+    background: #E8734A !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 10px !important;
+    padding: 8px 18px !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    transition: background 0.15s !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+    white-space: nowrap !important;
+}
+
+    .introjs-nextbutton:hover {
+        background: #d45f38 !important;
+    }
+
+/* Skip button */
+.introjs-skipbutton {
+    color: #9AA0B0 !important;
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    margin-left: auto !important;
+    padding: 8px 4px !important;
+    border: none !important;
+    background: none !important;
+    cursor: pointer !important;
+    text-decoration: none !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+}
+
+    .introjs-skipbutton:hover {
+        color: #E8734A !important;
+    }
+
+/* Progress bar */
+.introjs-progress {
+    background: #f0f1f5 !important;
+    border-radius: 99px !important;
+    height: 4px !important;
+    margin-bottom: 14px !important;
+}
+
+.introjs-progressbar {
+    background: #E8734A !important;
+    border-radius: 99px !important;
+}
+
+/* Highlight box */
+.introjs-helperLayer {
+    border-radius: 12px !important;
+    box-shadow: 0 0 0 4px rgba(232, 115, 74, 0.4), 0 0 0 9999px rgba(20, 45, 55, 0.78) !important;
+}
+
+.introjs-spotlight {
+    border-radius: 12px !important;
+}
