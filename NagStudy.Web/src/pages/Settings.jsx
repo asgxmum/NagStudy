@@ -8,6 +8,7 @@ import { useRef } from "react";
 import { useTour } from "../context/useTour";
 import introJs from "intro.js";
 import "intro.js/introjs.css";
+import { fireConfetti } from "../utils/confetti";
 
 const PW_RULE = /^(?=.*[A-Z])(?=.*[\W_])(?=.*\d).{8,}$/;
 
@@ -30,9 +31,9 @@ export default function Settings() {
                 { element: "#settings-ai", intro: "Choose your <b>AI coach personality</b> and toggle automatic nag reminders.", title: "AI Coach Settings" },
             ],
             nextLabel: "Next →", prevLabel: "← Back", doneLabel: "Done! 🎉",
-            skipLabel: "Skip tour", showProgress: true, showBullets: false, exitOnOverlayClick: false,
+            skipLabel: "✕", showProgress: true, showBullets: false, exitOnOverlayClick: false,
         });
-        intro.oncomplete(() => endTour());
+        intro.oncomplete(() => { fireConfetti(); endTour(); }); // last page done → celebrate 🎉
         intro.onexit(() => endTour());
         intro.start();
     }, [active, currentPage, grid2Ref.current]);

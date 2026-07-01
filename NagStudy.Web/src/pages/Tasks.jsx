@@ -42,7 +42,7 @@ export default function Tasks() {
         intro.setOptions({
             steps: [
                 {
-                    element: ".tasks-top-actions",
+                    element: ".tasks-top-actions .btn-primary",
                     intro: "Click <b>+ Add task</b> to create a new task. Give it a title, colour, and optional time slot.",
                     title: "Add a Task",
                 },
@@ -60,10 +60,11 @@ export default function Tasks() {
             nextLabel: "Next →",
             prevLabel: "← Back",
             doneLabel: "Next page →",
-            skipLabel: "Skip tour",
+            skipLabel: "✕",
             showProgress: true,
             showBullets: false,
             exitOnOverlayClick: false,
+            helperElementPadding: 12, // even breathing room around the button
         });
 
         let completed = false;

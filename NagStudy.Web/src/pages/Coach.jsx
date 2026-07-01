@@ -45,7 +45,7 @@ export default function Coach() {
                 { element: ".coach-gemini-main", intro: "This is the <b>chat area</b>. Ask your coach anything — it knows your study history.", title: "Chat" },
             ],
             nextLabel: "Next →", prevLabel: "← Back", doneLabel: "Next page →",
-            skipLabel: "Skip tour", showProgress: true, showBullets: false, exitOnOverlayClick: false,
+            skipLabel: "✕", showProgress: true, showBullets: false, exitOnOverlayClick: false,
         });
         let completed = false;
         intro.oncomplete(() => { completed = true; nextPage(); setTimeout(() => navigate("/app/ranking"), 200); });
