@@ -11,4 +11,5 @@ public class AuthResponse
     public int? NagProfileId { get; set; }
     public string? NagProfileName { get; set; }
     public string? NagProfileKey { get; set; }
+    public bool HasSeenTutorial { get; set; }
 }

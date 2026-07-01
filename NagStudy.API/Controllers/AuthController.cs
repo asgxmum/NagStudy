@@ -95,7 +95,8 @@ public class AuthController : ControllerBase
             AiTone = user.NagProfile?.Key ?? user.AiTone,
             NagProfileId = user.NagProfileId,
             NagProfileName = user.NagProfile?.Name,
-            NagProfileKey = user.NagProfile?.Key
+            NagProfileKey = user.NagProfile?.Key,
+            HasSeenTutorial = user.HasSeenTutorial
         };
     }
 
