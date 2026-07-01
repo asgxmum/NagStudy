@@ -37,7 +37,7 @@ export default function Ranking() {
                 { element: "#rankList", intro: "The leaderboard ranks students by <b>total focus minutes</b> this week. Study more to climb up!", title: "Leaderboard" },
             ],
             nextLabel: "Next →", prevLabel: "← Back", doneLabel: "Next page →",
-            skipLabel: "Skip tour", showProgress: true, showBullets: false, exitOnOverlayClick: false,
+            skipLabel: "✕", showProgress: true, showBullets: false, exitOnOverlayClick: false,
         });
         let completed = false;
         intro.oncomplete(() => { completed = true; nextPage(); setTimeout(() => navigate("/app/settings"), 200); });

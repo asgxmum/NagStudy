@@ -1,4 +1,4 @@
-/* ©¤©¤ NagStudy Tour Styles ©¤©¤ */
+/* ï¿½ï¿½ï¿½ï¿½ NagStudy Tour Styles ï¿½ï¿½ï¿½ï¿½ */
 
 /* Overlay */
 .introjs-overlay {
@@ -12,9 +12,9 @@
     border-radius: 16px !important;
     box-shadow: 0 12px 40px rgba(27, 33, 80, 0.18) !important;
     border: none !important;
-    padding: 24px !important;
-    min-width: 300px !important;
-    max-width: 360px !important;
+    padding: 20px 20px 14px !important;   /* less bottom padding */
+    min-width: 280px !important;
+    max-width: 340px !important;
     font-family: var(--font-body, 'Inter', sans-serif) !important;
 }
 
@@ -35,6 +35,12 @@
     border-left-color: #fff !important;
 }
 
+/* Header (title + âœ•) â€” strip intro.js's own padding so it aligns with the body text */
+.introjs-tooltip-header {
+    padding: 0 !important;
+    min-height: 0 !important;
+}
+
 /* Title */
 .introjs-tooltip-title {
     font-size: 16px !important;
@@ -50,16 +56,18 @@
     color: #5a6282 !important;
     line-height: 1.6 !important;
     margin-bottom: 0 !important;
+    padding: 2px 0 0 !important;   /* kill intro.js's default 20px padding (card already has its own) */
 }
 
-/* Buttons row */
+/* Buttons row â€” Next pushed to the right (Skip sits bottom-left, see below) */
 .introjs-tooltipbuttons {
     border-top: 1px solid #f0f1f5 !important;
-    padding-top: 16px !important;
-    margin-top: 16px !important;
+    padding: 12px 0 0 0 !important;   /* drop intro.js's default 10px bottom/side padding */
+    margin-top: 10px !important;
     display: flex !important;
     gap: 8px !important;
     align-items: center !important;
+    justify-content: flex-end !important;
 }
 
 /* Hide Back button */
@@ -87,19 +95,25 @@
         background: #d45f38 !important;
     }
 
-/* Skip button */
+/* Skip button â€” subtle âœ• in the top-right corner (Option B) */
 .introjs-skipbutton {
-    color: #9AA0B0 !important;
-    font-size: 12.5px !important;
-    font-weight: 500 !important;
-    margin-left: auto !important;
-    padding: 8px 4px !important;
+    position: absolute !important;
+    top: 2px !important;
+    right: 2px !important;
+    width: 28px !important;
+    height: 28px !important;
+    line-height: 28px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    text-align: center !important;
+    color: #c2c6d0 !important;
+    font-size: 17px !important;
+    font-weight: 400 !important;
     border: none !important;
     background: none !important;
     cursor: pointer !important;
     text-decoration: none !important;
-    white-space: nowrap !important;
-    flex-shrink: 0 !important;
+    border-radius: 8px !important;
 }
 
     .introjs-skipbutton:hover {
@@ -127,4 +141,11 @@
 
 .introjs-spotlight {
     border-radius: 12px !important;
+}
+
+/* Round highlight for the circular avatar step (step uses highlightClass: "intro-round") */
+.introjs-helperLayer.intro-round {
+    border-radius: 50% !important;
+    transform: scale(1.35);      /* enlarge the circle so it isn't cramped around the avatar */
+    transform-origin: center;
 }

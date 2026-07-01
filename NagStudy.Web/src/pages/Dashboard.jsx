@@ -93,6 +93,7 @@ export default function Dashboard() {
                     element: "#heroFrame",
                     intro: "This is your <b>AI Coach</b> — it adapts its personality based on the tone you pick in Settings.",
                     title: "Your AI Coach",
+                    highlightClass: "intro-round", // round highlight to match the circular avatar
                 },
                 {
                     element: ".btn-primary",
@@ -113,7 +114,7 @@ export default function Dashboard() {
             nextLabel: "Next →",
             prevLabel: "← Back",
             doneLabel: "Next page →",
-            skipLabel: "Skip tour",
+            skipLabel: "✕",
             showProgress: true,
             showBullets: false,
             exitOnOverlayClick: false,
