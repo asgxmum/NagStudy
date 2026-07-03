@@ -19,6 +19,8 @@ const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
 export default function Tasks() {
     const [taskMap, setTaskMap] = useState(new Map());
     const [yesterday, setYesterday] = useState([]);
+    const [yesterdayLoaded, setYesterdayLoaded] = useState(false);
+    const [boardLoaded, setBoardLoaded] = useState(false);
     const [nowMin, setNowMin] = useState(nowMinutesMyt);
     const [debugOpen, setDebugOpen] = useState(false);
     const [debugDragNow, setDebugDragNow] = useState(false);
@@ -28,6 +30,7 @@ export default function Tasks() {
     const gdropRef = useRef(null);
     const tourStartedRef = useRef(false);
     const topActionsRef = useRef(null);
+    const introRef = useRef(null);
     const navigate = useNavigate();
     const { checkTaskNudges, setDebugNow, onTaskUpdated } = useNag();
     const { active, currentPage, nextPage, endTour } = useTour();
@@ -35,12 +38,19 @@ export default function Tasks() {
     useEffect(() => {
         if (!active || currentPage !== "tasks") return;
         if (!topActionsRef.current) return;
+        if (!yesterdayLoaded || !boardLoaded) return; // wait for cards to reach final size (no highlight flash)
         if (tourStartedRef.current) return;
         tourStartedRef.current = true;
 
         const intro = introJs();
+        introRef.current = intro;
         intro.setOptions({
             steps: [
+                {
+                    element: ".tasks-yday",
+                    intro: "<b>Yesterday's review</b> shows what you finished vs. missed. Tap <b>↓ To today</b> on a missed task to carry it over and finish it today.",
+                    title: "Yesterday's Review",
+                },
                 {
                     element: ".tasks-top-actions .btn-primary",
                     intro: "Click <b>+ Add task</b> to create a new task. Give it a title, colour, and optional time slot.",
@@ -74,10 +84,17 @@ export default function Tasks() {
             setTimeout(() => navigate("/app/pomodoro"), 200);
         });
         intro.onexit(() => {
+            introRef.current = null;
             if (!completed) endTour();
         });
         intro.start();
-    }, [active, currentPage, topActionsRef.current]);
+    }, [active, currentPage, topActionsRef.current, yesterdayLoaded, boardLoaded]);
+
+    // Cards grow as their data loads in (e.g. Yesterday's review). Re-measure the
+    // tour highlight box so it stays sized to the element on the current step.
+    useEffect(() => {
+        if (active && currentPage === "tasks") introRef.current?.refresh();
+    }, [active, currentPage, yesterday, taskMap]);
 
     const effectiveNowMin = debugDragNow && debugNowMin != null ? debugNowMin : nowMin;
     const { today, backlog, gantt } = splitBoard(taskMap);
@@ -88,12 +105,17 @@ export default function Tasks() {
             setTaskMap(mergeBoard(res.data));
         } catch {
             notifyError("Couldn't load tasks — check your connection and refresh.");
+        } finally {
+            setBoardLoaded(true);
         }
     }
 
     useEffect(() => {
         loadBoard();
-        api.get("/tasks?date=yesterday").then((res) => setYesterday(res.data.map(fromApi))).catch(() => { });
+        api.get("/tasks?date=yesterday")
+            .then((res) => setYesterday(res.data.map(fromApi)))
+            .catch(() => { })
+            .finally(() => setYesterdayLoaded(true));
     }, []);
 
     useEffect(() => {
@@ -399,9 +421,9 @@ export default function Tasks() {
             </div>
 
             <div className="tasks-layout">
-                {yesterday.length > 0 && (
-                    <div className="card yday-card tasks-yday">
-                        <h3>Yesterday&apos;s review</h3>
+                <div className="card yday-card tasks-yday">
+                    <h3>Yesterday&apos;s review</h3>
+                    {yesterday.length > 0 ? (
                         <div className="dump-cols">
                             <div className="dump-col">
                                 <div className="dump-sec">✅ Done <span className="dump-n">{yDone.length}</span></div>
@@ -417,8 +439,10 @@ export default function Tasks() {
                                 ))}
                             </div>
                         </div>
-                    </div>
-                )}
+                    ) : (
+                        <div className="dump-empty">No tasks from yesterday yet — add a few to your board and get to work! 💪</div>
+                    )}
+                </div>
 
                 <div className="card tasks-top-panel">
                     <h3>Brain Dump · To-Do</h3>
@@ -426,8 +450,8 @@ export default function Tasks() {
                         <button type="button" className="btn btn-primary btn-sm" onClick={() => setPopover({ ...NEW_TASK, color: TASK_COLORS[0] })}>+ Add task</button>
                     </div>
                     <div className="tasks-top-cols dump-cols">
-                        <TaskColumn label="📋 Today" tasks={today} nowMin={effectiveNowMin} onEdit={setPopover} onToggleImp={toggleImp} onSetDone={setDone} onMoveBacklog={moveToBacklog} onDel={delTask} />
-                        <TaskColumn label="📦 Backlog" tasks={backlog} nowMin={effectiveNowMin} onEdit={setPopover} onToggleImp={toggleImp} onSetDone={setDone} onMoveToday={moveToToday} onDel={delTask} />
+                        <TaskColumn label="📋 Today" tasks={today} nowMin={effectiveNowMin} emptyText="No tasks for today yet — hit “+ Add task” and fill your day! ✏️" onEdit={setPopover} onToggleImp={toggleImp} onSetDone={setDone} onMoveBacklog={moveToBacklog} onDel={delTask} />
+                        <TaskColumn label="📦 Backlog" tasks={backlog} nowMin={effectiveNowMin} emptyText="Nothing saved for later — brain-dump tasks here anytime." onEdit={setPopover} onToggleImp={toggleImp} onSetDone={setDone} onMoveToday={moveToToday} onDel={delTask} />
                     </div>
                 </div>
 
@@ -483,7 +507,7 @@ export default function Tasks() {
     );
 }
 
-function TaskColumn({ label, tasks, nowMin, onEdit, onToggleImp, onSetDone, onMoveBacklog, onMoveToday, onDel }) {
+function TaskColumn({ label, tasks, nowMin, emptyText = "Nothing here", onEdit, onToggleImp, onSetDone, onMoveBacklog, onMoveToday, onDel }) {
     return (
         <div className="dump-col">
             <div className="dump-sec">{label} <span className="dump-n">{tasks.length}</span></div>
@@ -519,7 +543,7 @@ function TaskColumn({ label, tasks, nowMin, onEdit, onToggleImp, onSetDone, onMo
                         </div>
                     </div>
                 );
-            }) : <div className="dump-empty">Nothing here</div>}
+            }) : <div className="dump-empty">{emptyText}</div>}
         </div>
     );
 }

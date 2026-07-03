@@ -668,16 +668,22 @@ button {
     grid-template-columns: 1fr 1fr;
     gap: 30px;
     align-items: center;
-    padding: 36px 0 64px;
-    min-height: 560px
+    padding: 24px 0;
+    min-height: calc(100vh - 82px)
+  }
+
+  /* nudge the whole hero block up a bit so the top whitespace isn't too large
+     (text + bunny + circle all move together, keeping their shared center line) */
+  .hero .hero-copy {
+    transform: translateY(-35px);
   }
 
   .blob {
     position: absolute;
-    top: -120px;
-    right: -160px;
-    width: 760px;
-    height: 680px;
+    top: -105px;
+    right: -240px;
+    width: 840px;
+    height: 700px;
     background: var(--peach);
     border-radius: 42% 58% 56% 44% / 50% 46% 54% 50%;
     z-index: -1
@@ -728,6 +734,22 @@ button {
     overflow: visible
   }
 
+  /* ShinyText effect — light sweep across a word (pure CSS, no motion dep). Used on "win" and "coach". */
+  .shiny {
+    background-image: linear-gradient(90deg, var(--ink) 0%, var(--ink) 42%, #F0A66A 50%, var(--ink) 58%, var(--ink) 100%);
+    background-size: 220% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+    animation: shinySweep 4s linear infinite
+  }
+
+  @keyframes shinySweep {
+    0% { background-position: 150% center }
+    45%, 100% { background-position: -50% center }
+  }
+
   .hero p.sub {
     font-size: 16px;
     color: var(--ink2);
@@ -763,6 +785,7 @@ button {
     align-items: center;
     justify-content: center;
     font-size: 16px;
+    padding-left: 5px;
     box-shadow: var(--shadow-coral);
     transition: transform .16s
   }
@@ -780,7 +803,7 @@ button {
   .visual {
     position: relative;
     height: 100%;
-    min-height: 480px;
+    min-height: 440px;
     display: flex;
     align-items: center;
     justify-content: center
@@ -788,11 +811,12 @@ button {
 
   .bun-stage {
     position: relative;
-    width: 390px;
-    height: 440px;
+    width: 425px;
+    height: 480px;
     display: flex;
     align-items: flex-end;
-    justify-content: center
+    justify-content: center;
+    transform: translate(15px, -35px)
   }
 
   .bun-stage::before {
@@ -816,7 +840,7 @@ button {
   .bun-main {
     position: relative;
     z-index: 2;
-    width: 410px;
+    width: 440px;
     aspect-ratio: 1/1;
     max-width: 100%;
     line-height: 1;
@@ -1889,6 +1913,22 @@ button {
   .coach:hover {
     box-shadow: var(--shadow-lg);
     transform: translateY(-6px)
+  }
+
+  /* BorderGlow-wrapped coach cards: let the glow escape, clip the inner, round the top */
+  .coach.border-glow-card {
+    overflow: visible;
+    box-shadow: var(--shadow);
+    border: none;
+  }
+
+  .coach.border-glow-card > .border-glow-inner {
+    overflow: hidden;
+    border-radius: inherit;
+  }
+
+  .coach.border-glow-card .top {
+    border-radius: 24px 24px 0 0;
   }
 
   .coach .top {
@@ -5892,6 +5932,22 @@ button {
 .modal-overlay .set-input:focus {
   border-color: var(--mint);
   box-shadow: 0 0 0 3px rgba(232, 115, 74, 0.12);
+}
+
+/* Task time picker: "Now" shortcut next to the MUI TimePicker */
+.modal-overlay .time-now-btn {
+  border: none;
+  background: transparent;
+  color: #e8734a;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+.modal-overlay .time-now-btn:hover {
+  background: rgba(232, 115, 74, 0.1);
 }
 
 /* Task add/edit modal (portaled) */

@@ -70,8 +70,26 @@
     justify-content: flex-end !important;
 }
 
-/* Hide Back button */
+/* Back button — subtle text link, bottom-left; Next stays bottom-right (margin-right:auto) */
 .introjs-prevbutton {
+    margin-right: auto !important;
+    background: transparent !important;
+    color: #8890a6 !important;
+    border: none !important;
+    padding: 8px 4px !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+    cursor: pointer !important;
+    text-shadow: none !important;
+}
+
+.introjs-prevbutton:hover {
+    background: transparent !important;
+    color: #2c3e63 !important;
+}
+
+/* Nothing to go back to on a page's first step → hide the disabled Back */
+.introjs-prevbutton.introjs-disabled {
     display: none !important;
 }
 
@@ -120,17 +138,34 @@
         color: #E8734A !important;
     }
 
-/* Progress bar */
+/* Progress bar — with a bunny running along the leading edge */
 .introjs-progress {
     background: #f0f1f5 !important;
     border-radius: 99px !important;
     height: 4px !important;
-    margin-bottom: 14px !important;
+    margin-top: 18px !important;
+    margin-bottom: 16px !important;
+    overflow: visible !important;
 }
 
 .introjs-progressbar {
+    position: relative !important;
     background: #E8734A !important;
     border-radius: 99px !important;
+    overflow: visible !important;
+    transition: width 0.4s ease !important;
+}
+
+/* running bunny at the tip of the fill (moves right as progress grows) */
+.introjs-progressbar::after {
+    content: "";
+    position: absolute;
+    right: -15px;
+    bottom: -3px;
+    width: 30px;
+    height: 30px;
+    background: url("/bunny_run_final.gif") center bottom / contain no-repeat;
+    pointer-events: none;
 }
 
 /* Highlight box */

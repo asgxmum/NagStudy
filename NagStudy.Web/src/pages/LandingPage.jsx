@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { personas, ranking, fmtDur } from "../data/mock";
+import BorderGlow from "../components/BorderGlow/BorderGlow";
+import PillNav from "../components/PillNav/PillNav";
 
 // Standalone full-screen marketing landing (NOT inside AppLayout).
 // Mirrors the prototype's #screen-home block VERBATIM so the global prototype.css
@@ -20,6 +22,13 @@ const COACH_EXTRA = {
   Soft: { top: "rgba(126,196,142,.18)", tagBg: "rgba(126,196,142,.22)", tagColor: "#3f9a5e", quote: '"You\'ve focused 2h already — wonderful! Let\'s do just one more 🌷"' },
   Normal: { top: "rgba(110,137,190,.16)", tagBg: "rgba(110,137,190,.18)", tagColor: "var(--sky)", quote: '"Today: 2h 35m focus, 2 missed. Recommend starting now."' },
   Harsh: { top: "rgba(194,160,91,.2)", tagBg: "rgba(194,160,91,.22)", tagColor: "var(--gold)", quote: '"Only 2h, and already resting? First place isn\'t, you know 👑"' },
+};
+
+// BorderGlow palette per persona: mesh-gradient colours + glow hue ("H S L").
+const COACH_GLOW = {
+  Soft: { glow: "145 50 55", colors: ["#6FC98A", "#3f9a5e", "#A8E6B8"] },
+  Normal: { glow: "218 48 62", colors: ["#8FB0E6", "#6E89BE", "#B9CCEC"] },
+  Harsh: { glow: "42 58 58", colors: ["#E2C77A", "#BE9E54", "#F0DCA0"] },
 };
 
 // Rotating student testimonials for the landing carousel.
@@ -52,6 +61,22 @@ export default function LandingPage() {
   }, []);
   const tst = TESTIMONIALS[tIdx];
 
+  // Stable reference: without this, the inline items array is new on every render (the
+  // testimonial carousel re-renders every 5s), re-firing PillNav's layout effect and
+  // thrashing layout (~400ms forced reflow each time → visible animation stutter).
+  const navItems = useMemo(
+    () => [
+      { label: "Home", href: "#screen-home" },
+      { label: "Features", href: "#services" },
+      { label: "Coaches", href: "#coaches" },
+      { label: "Ranking", href: "#leaderboard" },
+      ...(isAuthed
+        ? [{ label: `${user?.nickname ?? "App"} →`, href: appHref }]
+        : [{ label: "Login", href: "/login" }, { label: "Sign up", href: "/signup" }]),
+    ],
+    [isAuthed, user, appHref]
+  );
+
   // Animate the preview card's progress bars from 0 → target once it scrolls into view.
   const previewRef = useRef(null);
   const [barsShown, setBarsShown] = useState(false);
@@ -68,51 +93,25 @@ export default function LandingPage() {
 
   return (
     <div className="screen lp active" id="screen-home">
-      <nav>
-        <div className="wrap nav-in">
-          <div className="brand"><img src="/NagStudy-Logo.svg" alt="NagStudy" style={{ height: 30, width: "auto", display: "block" }} /><span><span className="nag">Nag</span>Study</span></div>
-          <div className="nav-links">
-            <a className="nav-link active" href="#screen-home">Home</a>
-            <a className="nav-link" href="#services">Features</a>
-            <a className="nav-link" href="#coaches">Coaches</a>
-            <a className="nav-link" href="#leaderboard">Ranking</a>
-            {isAuthed ? (
-              <Link
-                className="signup cta-link"
-                to={appHref}
-                title={`Logged in as ${user?.nickname ?? "you"} — go to the app`}
-                style={{ display: "inline-flex", alignItems: "center", gap: 9 }}
-              >
-                <span
-                  aria-hidden="true"
-                  style={{
-                    width: 28, height: 28, borderRadius: "50%",
-                    background: navPersona.tint,
-                    display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 16, flexShrink: 0,
-                    boxShadow: `0 0 0 2px var(--card), 0 0 0 3px ${navPersona.color}59`,
-                  }}
-                >
-                  🐰
-                </span>
-                {user?.nickname ?? "Go to app"} →
-              </Link>
-            ) : (
-              <>
-                <Link className="nav-link cta-link" to="/login">Login</Link>
-                <Link className="signup cta-link" to="/signup">Sign up</Link>
-              </>
-            )}
-          </div>
-        </div>
-      </nav>
+      <PillNav
+        logo="/NagStudy-Logo.svg"
+        logoAlt="NagStudy"
+        logoText={<><span className="nag">Nag</span>Study</>}
+        items={navItems}
+        activeHref="#screen-home"
+        baseColor="#E8734A"
+        pillColor="transparent"
+        pillTextColor="#2C3E63"
+        hoveredPillTextColor="#ffffff"
+        initialLoadAnimation={false}
+      />
 
       {/* HERO */}
       <header className="wrap hero">
         <div className="blob"></div><div className="blob2"></div>
         <div className="hero-copy">
           <div className="eyebrow">Meet your AI study buddy</div>
-          <h1>Study, focus,<br />and <span className="ul">win<svg viewBox="0 0 200 20" preserveAspectRatio="none"><path d="M4,13 Q60,2 110,9 T196,7" stroke="#E8734A" strokeWidth="7" fill="none" strokeLinecap="round" /></svg></span> your week.</h1>
+          <h1>Study, focus,<br />and <span className="ul"><span className="shiny">win</span><svg viewBox="0 0 200 20" preserveAspectRatio="none"><defs><linearGradient id="winUl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#E8734A" /><stop offset="0.35" stopColor="#E8734A" /><stop offset="0.5" stopColor="#FFCF96" /><stop offset="0.65" stopColor="#E8734A" /><stop offset="1" stopColor="#E8734A" /><animateTransform attributeName="gradientTransform" type="translate" values="1.2 0; -1.2 0; -1.2 0" keyTimes="0; 0.45; 1" dur="4s" repeatCount="indefinite" /></linearGradient></defs><path d="M4,13 Q60,2 110,9 T196,7" stroke="url(#winUl)" strokeWidth="7" fill="none" strokeLinecap="round" /></svg></span> your week.</h1>
           <p className="sub">Brain-dump your tasks, time-box them, and let your AI bunny coach nag you into focus — then climb your school's weekly ranking.</p>
           <div className="hero-cta">
             <Link className="btn btn-coral" to={isAuthed ? appHref : "/login"}>{isAuthed ? "Go to my dashboard" : "Find out more"}</Link>
@@ -184,14 +183,22 @@ export default function LandingPage() {
       <section className="sec wrap" id="coaches">
         <div className="sec-head">
           <div className="sec-tag">Meet the squad</div>
-          <h2>Pick the coach who nags you</h2>
+          <h2>Pick the <span className="shiny">coach</span> who nags you</h2>
           <p>Same data, completely different attitude. Switch any time — only the prompt changes.</p>
         </div>
         <div className="coach-grid">
           {personas.map((p) => {
             const x = COACH_EXTRA[p.key] ?? COACH_EXTRA.Normal;
+            const g = COACH_GLOW[p.key] ?? COACH_GLOW.Normal;
             return (
-              <div className="coach" key={p.key}>
+              <BorderGlow
+                key={p.key}
+                className="coach"
+                backgroundColor="var(--card)"
+                borderRadius={24}
+                glowColor={g.glow}
+                colors={g.colors}
+              >
                 <div className="top" style={{ background: x.top }}>
                   <img
                     src={COACH_IMG[p.key] ?? COACH_IMG.Normal}
@@ -204,7 +211,7 @@ export default function LandingPage() {
                   <div className="ds">{p.desc}</div>
                   <div className="quote">{x.quote}</div>
                 </div>
-              </div>
+              </BorderGlow>
             );
           })}
         </div>
