@@ -1,5 +1,10 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import dayjs from "dayjs";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { TimePicker } from "@mui/x-date-pickers/TimePicker";
+import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { TASK_COLORS, isPresetTaskColor } from "../utils/taskColor";
 import { todayMytStr, classifyFromForm } from "../utils/taskMapper";
 
@@ -22,56 +27,56 @@ function placementMeta(dateStr, startMin) {
   return { icon: "📋", label: "Today", tone: "today" };
 }
 
-// 12-hour time picker (1–12 : minute : AM/PM). Stores minutes-since-midnight,
-// so the backend/Gantt are unaffected. Replaces the native <input type="time">,
-// whose 12h/24h display Chrome controls by browser locale (ignores `lang`).
-const HOURS_12 = Array.from({ length: 12 }, (_, i) => i + 1); // 1..12
-const MINUTES = Array.from({ length: 60 }, (_, i) => i);      // 0..59
+// Time picker (MUI TimePicker, 24h). The form stores minutes-since-midnight
+// (or "" = unset / Backlog); we bridge that to a dayjs time value here.
+const muiTheme = createTheme({
+  palette: { primary: { main: "#E8734A" } },
+  shape: { borderRadius: 12 },
+  typography: { fontFamily: "inherit", fontSize: 13.5 },
+});
 
-function minToParts(min) {
-  if (min === "" || min == null) return { h: "", m: "", ap: "AM" };
-  const h24 = Math.floor(min / 60);
-  return { h: String(h24 % 12 || 12), m: String(min % 60), ap: h24 < 12 ? "AM" : "PM" };
-}
-function partsToMin(h, m, ap) {
-  if (h === "") return "";
-  const h12 = Number(h);
-  const h24 = ap === "AM" ? (h12 === 12 ? 0 : h12) : (h12 === 12 ? 12 : h12 + 12);
-  return h24 * 60 + (m === "" ? 0 : Number(m)); // minute defaults to :00 once hour is set
-}
+const minToDayjs = (min) =>
+  min === "" || min == null ? null : dayjs().startOf("day").add(Number(min), "minute");
+const dayjsToMin = (d) => (d && d.isValid() ? d.hour() * 60 + d.minute() : "");
 
-function Time12({ id, value, onChange }) {
-  const [h, setH] = useState("");
-  const [m, setM] = useState("");
-  const [ap, setAp] = useState("AM");
-
-  useEffect(() => {
-    const p = minToParts(value);
-    setH(p.h); setM(p.m); setAp(p.ap);
-  }, [value]);
-
-  const emit = (nh, nm, nap) => onChange(partsToMin(nh, nm, nap));
-  const two = (n) => String(n).padStart(2, "0");
-  const sel = { border: "none", background: "transparent", outline: "none", font: "inherit", color: "inherit", cursor: "pointer", padding: "2px 0" };
-
+function TimeField({ id, value, onChange, showNow = true }) {
+  const setNow = () => {
+    const n = dayjs();
+    onChange(n.hour() * 60 + n.minute());
+  };
   return (
-    <div className="set-input task-time12" style={{ display: "inline-flex", alignItems: "center", gap: 2, padding: "6px 10px" }}>
-      <select id={id} style={sel} value={h}
-        onChange={(e) => { setH(e.target.value); emit(e.target.value, m, ap); }}>
-        <option value="">--</option>
-        {HOURS_12.map((x) => <option key={x} value={x}>{two(x)}</option>)}
-      </select>
-      <span style={{ opacity: 0.5 }}>:</span>
-      <select style={sel} value={m} aria-label="Minute"
-        onChange={(e) => { setM(e.target.value); emit(h, e.target.value, ap); }}>
-        <option value="">--</option>
-        {MINUTES.map((x) => <option key={x} value={x}>{two(x)}</option>)}
-      </select>
-      <select style={{ ...sel, marginLeft: 6 }} value={ap} aria-label="AM/PM"
-        onChange={(e) => { setAp(e.target.value); emit(h, m, e.target.value); }}>
-        <option value="AM">AM</option>
-        <option value="PM">PM</option>
-      </select>
+    <div className="task-time12" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+      <TimePicker
+        value={minToDayjs(value)}
+        ampm={false}
+        minutesStep={5}
+        format="HH:mm"
+        localeText={{ fieldHoursPlaceholder: () => "HH" }}
+        onChange={(d) => onChange(dayjsToMin(d))}
+        slotProps={{
+          textField: { id, size: "small", sx: { width: 164 } },
+          field: { clearable: true },
+          // keep Cancel/OK for clarity; clicking outside also closes (accepts) it
+          actionBar: { actions: ["cancel", "accept"] },
+          // our task modal sits at z-index 9000; lift the picker popup above it
+          // prefer opening downward; keep the clock compact so it fits below
+          popper: {
+            placement: "bottom-start",
+            sx: {
+              zIndex: 9500,
+              "& .MuiMultiSectionDigitalClockSection-root": { maxHeight: 168 },
+              // clock is narrower than the Cancel/OK bar → centre it (no lopsided left gap)
+              "& .MuiPickersLayout-contentWrapper": { justifySelf: "center" },
+            },
+          },
+          dialog: { sx: { zIndex: 9500 } },
+        }}
+      />
+      {showNow && (
+        <button type="button" className="time-now-btn" onClick={setNow} title="Set to current time">
+          Now
+        </button>
+      )}
     </div>
   );
 }
@@ -138,8 +143,8 @@ export default function TaskPopover({ task, onSave, onDelete, onClose }) {
   const customColor = !isPresetTaskColor(form.color);
 
   return createPortal(
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card task-modal" lang="en" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal-card task-modal" lang="en">
         <header className="task-modal-head">
           <div>
             <h3>{isNew ? "Add task" : "Edit task"}</h3>
@@ -197,16 +202,20 @@ export default function TaskPopover({ task, onSave, onDelete, onClose }) {
                 <p className="sub" style={{ marginTop: 6 }}>📦 No date = saved for later (Backlog)</p>
               )}
             </div>
-            <div className="task-time-row">
-              <div className="set-field">
-                <label htmlFor="task-start">Start</label>
-                <Time12 id="task-start" value={form.startMin} onChange={(v) => setField("startMin", v)} />
-              </div>
-              <div className="set-field">
-                <label htmlFor="task-end">End</label>
-                <Time12 id="task-end" value={form.endMin} onChange={(v) => setField("endMin", v)} />
-              </div>
-            </div>
+            <ThemeProvider theme={muiTheme}>
+              <LocalizationProvider dateAdapter={AdapterDayjs}>
+                <div className="task-time-row">
+                  <div className="set-field">
+                    <label htmlFor="task-start">Start</label>
+                    <TimeField id="task-start" value={form.startMin} onChange={(v) => setField("startMin", v)} />
+                  </div>
+                  <div className="set-field">
+                    <label htmlFor="task-end">End</label>
+                    <TimeField id="task-end" value={form.endMin} onChange={(v) => setField("endMin", v)} showNow={false} />
+                  </div>
+                </div>
+              </LocalizationProvider>
+            </ThemeProvider>
           </section>
 
           <section className="task-modal-section task-modal-options">

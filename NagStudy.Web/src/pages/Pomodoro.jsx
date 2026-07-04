@@ -96,7 +96,7 @@ export default function Pomodoro() {
                 { element: ".pomo-log-card", intro: "Your <b>study log</b> for today — every session you complete shows up here.", title: "Today's Log" },
             ],
             nextLabel: "Next →", prevLabel: "← Back", doneLabel: "Next page →",
-            skipLabel: "Skip tour", showProgress: true, showBullets: false, exitOnOverlayClick: false,
+            skipLabel: "✕", showProgress: true, showBullets: false, exitOnOverlayClick: false,
         });
         let completed = false;
         intro.oncomplete(() => { completed = true; nextPage(); setTimeout(() => navigate("/app/coach"), 200); });

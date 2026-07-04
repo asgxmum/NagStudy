@@ -40,12 +40,12 @@ export default function Coach() {
         const intro = introJs();
         intro.setOptions({
             steps: [
-                { element: ".cgs-new-btn", intro: "Click <b>+ New chat</b> to start a conversation with your AI coach.", title: "Start a Chat" },
+                { element: ".cgs-new-btn", intro: "Click <b>+ New chat</b> to start a conversation. First you'll <b>pick a coach</b> — Healer (gentle), Secretary (just the facts), or Elite (savage) — each nags in its own voice.", title: "Start a Chat" },
                 { element: ".cgs-session-list", intro: "Your <b>past chat sessions</b> are listed here. Click any to continue.", title: "Chat History" },
-                { element: ".coach-gemini-main", intro: "This is the <b>chat area</b>. Ask your coach anything — it knows your study history.", title: "Chat" },
+                { element: ".coach-gemini-main", intro: "This is the <b>chat area</b> — ask your coach anything (it knows your study history). From the tools menu you can also <b>generate a study report</b>: pick the <b>time period</b> (this week / 7 / 30 days) and <b>language</b> (English / 中文), then hit Generate.", title: "Chat & Reports" },
             ],
             nextLabel: "Next →", prevLabel: "← Back", doneLabel: "Next page →",
-            skipLabel: "Skip tour", showProgress: true, showBullets: false, exitOnOverlayClick: false,
+            skipLabel: "✕", showProgress: true, showBullets: false, exitOnOverlayClick: false,
         });
         let completed = false;
         intro.oncomplete(() => { completed = true; nextPage(); setTimeout(() => navigate("/app/ranking"), 200); });
