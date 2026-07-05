@@ -66,13 +66,24 @@ public class TasksController : ControllerBase
             var dayEndUtc = TaskTimeHelper.MytDayEndUtc(dayMyt);
 
             query = query.Where(t =>
-                (t.ScheduledDate != null && t.ScheduledDate >= dayStartUtc && t.ScheduledDate < dayEndUtc) ||
-                (t.StartTime != null && t.StartTime >= dayStartUtc && t.StartTime < dayEndUtc) ||
-                (t.ScheduledDate == null && t.StartTime == null && t.CreatedAt >= dayStartUtc && t.CreatedAt < dayEndUtc));
+                t.ScheduledDate != null
+                && t.ScheduledDate >= dayStartUtc
+                && t.ScheduledDate < dayEndUtc);
         }
 
         var items = await query.OrderByDescending(t => t.CreatedAt).ToListAsync();
         return Ok(items.Select(TaskMapper.ToResponse));
+    }
+
+    /// <summary>Yesterday's review — Done + Undone (missed/open), ScheduledDate-only.</summary>
+    [HttpGet("yesterday/review")]
+    public async Task<IActionResult> GetYesterdayReview()
+    {
+        var yesterdayMyt = TaskTimeHelper.TodayMyt().AddDays(-1);
+        var tasks = await _db.Tasks
+            .Where(t => t.UserId == CurrentUserId)
+            .ToListAsync();
+        return Ok(YesterdayReviewHelper.Classify(tasks, yesterdayMyt));
     }
 
     [HttpGet("{id:int}")]

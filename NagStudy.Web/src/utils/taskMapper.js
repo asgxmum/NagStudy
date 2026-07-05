@@ -15,6 +15,21 @@ export function todayMytStr() {
   return myt.toISOString().slice(0, 10);
 }
 
+export function yesterdayMytStr() {
+  const today = todayMytStr();
+  const d = new Date(`${today}T12:00:00+08:00`);
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Earliest selectable date in task popover (past dates for Yesterday review debugging). */
+export function taskDatePickerMinStr() {
+  const today = todayMytStr();
+  const d = new Date(`${today}T12:00:00+08:00`);
+  d.setDate(d.getDate() - 90);
+  return d.toISOString().slice(0, 10);
+}
+
 export function minOfDay(iso) {
   if (!iso) return null;
   const d = asUtc(iso);
@@ -42,13 +57,17 @@ export function scheduledDateIso(dateStr) {
   return new Date(`${dateStr}T00:00:00+08:00`).toISOString();
 }
 
-/** Route task from form fields: no date or future date → Backlog; today → Today/Gantt. */
+/** Route task from form fields: no date → Backlog; future → Backlog; today/past → planned day. */
 export function classifyFromForm({ dateStr, startMin }) {
   const today = todayMytStr();
   const d = (dateStr || "").trim();
   if (!d) return { dateStr: "", isBacklog: true };
   if (d > today) return { dateStr: d, isBacklog: true };
-  return { dateStr: d, isBacklog: false, onGantt: d === today && startMin != null && startMin !== "" };
+  return {
+    dateStr: d,
+    isBacklog: false,
+    onGantt: startMin != null && startMin !== "" && (d === today || d < today),
+  };
 }
 
 export function fromApi(t) {
@@ -78,14 +97,13 @@ export function fromApi(t) {
 }
 
 export function toApi(t) {
-  const today = todayMytStr();
   const classified = classifyFromForm({ dateStr: t.dateStr, startMin: t.startMin });
   const dateStr = classified.dateStr;
   const isBacklog = classified.isBacklog;
 
   let status = "Inbox";
   if (t.status === "done") status = "Done";
-  else if (t.startMin != null && dateStr === today) status = "Scheduled";
+  else if (t.startMin != null && dateStr) status = "Scheduled";
   else if (t.status === "scheduled") status = "Scheduled";
 
   const startTime = t.startMin != null && dateStr
@@ -116,6 +134,33 @@ export function mergeBoard(board) {
     map.set(t.id, fromApi(t));
   });
   return map;
+}
+
+/** API: GET /tasks/yesterday/review */
+export function mapYesterdayReview(data) {
+  return {
+    done: (data?.done ?? []).map(fromApi),
+    undone: (data?.undone ?? []).map((u) => ({
+      ...fromApi(u),
+      kind: u.kind ?? (u.startTime ? "missed" : "open"),
+    })),
+  };
+}
+
+/** Fallback when /tasks/yesterday/review is unavailable — split GET /tasks?date=yesterday. */
+export function mapYesterdayFromTaskList(items) {
+  const done = [];
+  const undone = [];
+  for (const t of items ?? []) {
+    if ((t.status || "").toLowerCase() === "done") done.push(fromApi(t));
+    else {
+      undone.push({
+        ...fromApi(t),
+        kind: t.startTime ? "missed" : "open",
+      });
+    }
+  }
+  return { done, undone };
 }
 
 export function isScheduledToday(t) {

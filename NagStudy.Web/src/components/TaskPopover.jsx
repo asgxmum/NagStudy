@@ -6,7 +6,7 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { TimePicker } from "@mui/x-date-pickers/TimePicker";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { TASK_COLORS, isPresetTaskColor } from "../utils/taskColor";
-import { todayMytStr, classifyFromForm } from "../utils/taskMapper";
+import { todayMytStr, yesterdayMytStr, taskDatePickerMinStr, classifyFromForm } from "../utils/taskMapper";
 
 const emptyForm = () => ({
   title: "",
@@ -21,8 +21,15 @@ const emptyForm = () => ({
 
 function placementMeta(dateStr, startMin) {
   const c = classifyFromForm({ dateStr, startMin });
+  const today = todayMytStr();
+  const yday = yesterdayMytStr();
   if (!dateStr?.trim()) return { icon: "📦", label: "Backlog · no date", tone: "nodate" };
   if (c.isBacklog) return { icon: "📦", label: "Backlog · future", tone: "backlog" };
+  if (dateStr < today) {
+    const dayLabel = dateStr === yday ? "Yesterday" : dateStr;
+    if (startMin !== "") return { icon: "🗓️", label: `${dayLabel} · Scheduled`, tone: "past" };
+    return { icon: "📋", label: `${dayLabel} · planned`, tone: "past" };
+  }
   if (startMin !== "") return { icon: "🗓️", label: "Today · Scheduled", tone: "gantt" };
   return { icon: "📋", label: "Today", tone: "today" };
 }
@@ -117,11 +124,6 @@ export default function TaskPopover({ task, onSave, onDelete, onClose }) {
     if (!title) return;
 
     const dateStr = form.dateStr.trim();
-    if (dateStr && dateStr < today) {
-      setDateError("Date cannot be before today.");
-      return;
-    }
-
     const classified = classifyFromForm({ dateStr, startMin: form.startMin });
     onSave({
       ...task,
@@ -193,13 +195,16 @@ export default function TaskPopover({ task, onSave, onDelete, onClose }) {
                 type="date"
                 lang="en-GB"
                 className="set-input task-date-input"
-                min={today}
+                min={taskDatePickerMinStr()}
                 value={form.dateStr}
                 onChange={(e) => setField("dateStr", e.target.value)}
               />
               {dateError && <p className="task-field-error">{dateError}</p>}
               {!form.dateStr && !dateError && (
                 <p className="sub" style={{ marginTop: 6 }}>📦 No date = saved for later (Backlog)</p>
+              )}
+              {form.dateStr && form.dateStr < today && !dateError && (
+                <p className="sub" style={{ marginTop: 6 }}>📅 Past dates show in Yesterday&apos;s review (debug)</p>
               )}
             </div>
             <ThemeProvider theme={muiTheme}>

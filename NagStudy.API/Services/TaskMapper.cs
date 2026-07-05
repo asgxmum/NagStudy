@@ -60,4 +60,26 @@ public static class TaskMapper
         CreatedAt = t.CreatedAt,
         When = t.When,
     };
+
+    public static YesterdayUndoneTaskResponse ToUndoneResponse(StudyTask t)
+    {
+        var r = ToResponse(t);
+        return new YesterdayUndoneTaskResponse
+        {
+            Id = r.Id,
+            Title = r.Title,
+            Description = r.Description,
+            IsImportant = r.IsImportant,
+            RemindBeforeStart = r.RemindBeforeStart,
+            ScheduledDate = r.ScheduledDate,
+            Status = r.Status,
+            Color = r.Color,
+            StartTime = r.StartTime,
+            EndTime = r.EndTime,
+            CompletedAt = r.CompletedAt,
+            CreatedAt = r.CreatedAt,
+            When = r.When,
+            Kind = t.StartTime != null ? "missed" : "open",
+        };
+    }
 }

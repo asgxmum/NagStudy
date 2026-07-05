@@ -55,23 +55,21 @@ export default function Dashboard() {
     const navigate = useNavigate();
     const { fireTrigger } = useNag();
     const { active, currentPage, nextPage, endTour } = useTour();
-    const [doneMissed, setDoneMissed] = useState({ done: 0, missed: 0 });
+    const [todayTasks, setTodayTasks] = useState({ done: 0, missed: 0 });
     const [rank, setRank] = useState(null);
     const tourStartedRef = useRef(false);
     const heroRef = useRef(null);
 
     useEffect(() => {
         api.get("/dashboard")
-            .then((res) => setData(res.data))
+            .then((res) => {
+                setData(res.data);
+                setTodayTasks({
+                    done: res.data.todayDoneCount ?? 0,
+                    missed: res.data.todayMissedCount ?? 0,
+                });
+            })
             .catch(() => setError("Couldn't load your dashboard."));
-
-        api.get("/tasks").then((res) => {
-            const now = new Date();
-            const asUtc = (iso) => new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`);
-            const done = res.data.filter((t) => t.status === "Done").length;
-            const missed = res.data.filter((t) => t.status === "Scheduled" && t.endTime && asUtc(t.endTime) < now).length;
-            setDoneMissed({ done, missed });
-        }).catch(() => { });
 
         api.get("/ranking").then((res) => {
             const me = res.data.find((r) => r.isMe);
@@ -102,7 +100,7 @@ export default function Dashboard() {
                 },
                 {
                     element: ".grid-stats",
-                    intro: "Your <b>key stats</b> at a glance — today's focus time, this week's total, tasks done vs missed, and your school ranking.",
+                    intro: "Your <b>key stats</b> at a glance — today's focus time, this week's total, today's done vs missed tasks, and your school ranking.",
                     title: "Stats",
                 },
                 {
@@ -201,10 +199,10 @@ export default function Dashboard() {
                     <div className="delta flat">resets Mon 00:00 (MYT)</div>
                 </div>
                 <div className="stat">
-                    <div className="lbl">✅ Done / 😱 Missed</div>
-                    <div className="val">{doneMissed.done} / {doneMissed.missed}</div>
-                    <div className={`delta ${doneMissed.missed > 0 ? "down" : "flat"}`}>
-                        {doneMissed.missed > 0 ? "tackle the missed ones first" : "no misses — nice"}
+                    <div className="lbl">✅ Done today / 😱 Missed today</div>
+                    <div className="val">{todayTasks.done} / {todayTasks.missed}</div>
+                    <div className={`delta ${todayTasks.missed > 0 ? "down" : "flat"}`}>
+                        {todayTasks.missed > 0 ? "tackle today's missed blocks first" : "no misses today — nice"}
                     </div>
                 </div>
                 <div className="stat">

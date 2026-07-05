@@ -169,8 +169,9 @@ public static class DemoSeeder
             if (user == null) continue;
 
             var existing = db.Tasks.Where(t => t.UserId == user.Id).ToList();
-            if (existing.Any(t => (t.ScheduledDate ?? t.CreatedAt) >= yStartUtc
-                                && (t.ScheduledDate ?? t.CreatedAt) < yEndUtc)) continue; // still current
+            if (existing.Any(t => t.ScheduledDate != null
+                                    && t.ScheduledDate >= yStartUtc
+                                    && t.ScheduledDate < yEndUtc)) continue; // still current
             if (existing.Count > 0) db.Tasks.RemoveRange(existing);
 
             foreach (var p in specs)

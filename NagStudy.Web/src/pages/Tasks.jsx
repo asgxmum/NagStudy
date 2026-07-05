@@ -5,7 +5,8 @@ import api from "../api/client";
 import { taskColor, TASK_COLORS } from "../utils/taskColor";
 import {
     fromApi, toApi, mergeBoard, splitBoard, fmtTime, classifyFromForm,
-    isMissed, isScheduledToday, todayMytStr, nowMinutesMyt, NEW_TASK,
+    isMissed, isScheduledToday, todayMytStr, nowMinutesMyt, NEW_TASK, mapYesterdayReview,
+    mapYesterdayFromTaskList,
 } from "../utils/taskMapper";
 import TasksDebugToolbar, { isTasksDebugHotkey } from "../components/TasksDebugToolbar";
 import TaskPopover from "../components/TaskPopover";
@@ -18,7 +19,7 @@ const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
 
 export default function Tasks() {
     const [taskMap, setTaskMap] = useState(new Map());
-    const [yesterday, setYesterday] = useState([]);
+    const [yesterdayReview, setYesterdayReview] = useState({ done: [], undone: [] });
     const [yesterdayLoaded, setYesterdayLoaded] = useState(false);
     const [boardLoaded, setBoardLoaded] = useState(false);
     const [nowMin, setNowMin] = useState(nowMinutesMyt);
@@ -48,7 +49,7 @@ export default function Tasks() {
             steps: [
                 {
                     element: ".tasks-yday",
-                    intro: "<b>Yesterday's review</b> shows what you finished vs. missed. Tap <b>↓ To today</b> on a missed task to carry it over and finish it today.",
+                    intro: "<b>Yesterday's review</b> shows what you finished vs. what's still undone. Missed blocks can be confirmed done or moved with <b>↓ To today</b>.",
                     title: "Yesterday's Review",
                 },
                 {
@@ -94,7 +95,7 @@ export default function Tasks() {
     // tour highlight box so it stays sized to the element on the current step.
     useEffect(() => {
         if (active && currentPage === "tasks") introRef.current?.refresh();
-    }, [active, currentPage, yesterday, taskMap]);
+    }, [active, currentPage, yesterdayReview, taskMap]);
 
     const effectiveNowMin = debugDragNow && debugNowMin != null ? debugNowMin : nowMin;
     const { today, backlog, gantt } = splitBoard(taskMap);
@@ -110,12 +111,28 @@ export default function Tasks() {
         }
     }
 
+    async function loadYesterdayReview() {
+        try {
+            const res = await api.get("/tasks/yesterday/review");
+            setYesterdayReview(mapYesterdayReview(res.data));
+        } catch (err) {
+            // Older API builds lack /yesterday/review (404) — fall back to dated task list.
+            if (err.response?.status === 404) {
+                try {
+                    const fallback = await api.get("/tasks", { params: { date: "yesterday" } });
+                    setYesterdayReview(mapYesterdayFromTaskList(fallback.data));
+                    return;
+                } catch { /* use empty state below */ }
+            }
+            setYesterdayReview({ done: [], undone: [] });
+        } finally {
+            setYesterdayLoaded(true);
+        }
+    }
+
     useEffect(() => {
         loadBoard();
-        api.get("/tasks?date=yesterday")
-            .then((res) => setYesterday(res.data.map(fromApi)))
-            .catch(() => { })
-            .finally(() => setYesterdayLoaded(true));
+        loadYesterdayReview();
     }, []);
 
     useEffect(() => {
@@ -229,7 +246,7 @@ export default function Tasks() {
             color: t.color || TASK_COLORS[0],
         };
         if (merged.status !== "done") {
-            merged.status = merged.startMin != null && classified.dateStr === todayMytStr() && !classified.isBacklog
+            merged.status = merged.startMin != null && classified.dateStr && !classified.isBacklog
                 ? "scheduled" : "inbox";
         }
         try {
@@ -240,6 +257,7 @@ export default function Tasks() {
                 const res = await api.post("/tasks", toApi(merged));
                 upsertTask(res.data);
             }
+            await loadYesterdayReview();
             setPopover(null);
         } catch {
             notifyError("Couldn't save task.");
@@ -250,6 +268,7 @@ export default function Tasks() {
         removeTask(id);
         try {
             await api.delete(`/tasks/${id}`);
+            await loadYesterdayReview();
             setPopover(null);
         } catch {
             await loadBoard();
@@ -287,18 +306,45 @@ export default function Tasks() {
     }
 
     async function carryToday(id) {
-        const item = yesterday.find((t) => t.id === id);
+        const item = yesterdayReview.undone.find((t) => t.id === id);
         if (!item) return;
-        setYesterday((prev) => prev.filter((t) => t.id !== id));
         try {
-            const res = await api.post("/tasks", toApi({
-                title: item.title, imp: false, isBacklog: false, dateStr: todayMytStr(),
-                status: "inbox", startMin: null, endMin: null, color: item.color,
+            const res = await api.put(`/tasks/${id}`, toApi({
+                ...item,
+                dateStr: todayMytStr(),
+                isBacklog: false,
+                status: "inbox",
+                startMin: null,
+                endMin: null,
+            }));
+            setYesterdayReview((prev) => ({
+                ...prev,
+                undone: prev.undone.filter((t) => t.id !== id),
             }));
             upsertTask(res.data);
         } catch {
             notifyError("Couldn't carry that over.");
-            api.get("/tasks?date=yesterday").then((r) => setYesterday(r.data.map(fromApi))).catch(() => { });
+            loadYesterdayReview();
+        }
+    }
+
+    async function confirmYesterdayDone(id) {
+        const item = yesterdayReview.undone.find((t) => t.id === id);
+        if (!item || item.kind !== "missed") return;
+        try {
+            const res = await api.put(`/tasks/${id}`, toApi({
+                ...item,
+                status: "done",
+                completedAt: new Date().toISOString(),
+            }));
+            const doneTask = fromApi(res.data);
+            setYesterdayReview((prev) => ({
+                done: [...prev.done, doneTask],
+                undone: prev.undone.filter((t) => t.id !== id),
+            }));
+        } catch {
+            notifyError("Couldn't mark that as done.");
+            loadYesterdayReview();
         }
     }
 
@@ -381,8 +427,8 @@ export default function Tasks() {
         window.addEventListener("pointerup", onUp);
     }
 
-    const yDone = yesterday.filter((t) => t.status === "done");
-    const yMiss = yesterday.filter((t) => t.status !== "done");
+    const { done: yDone, undone: yUndone } = yesterdayReview;
+    const hasYesterdayTasks = yDone.length + yUndone.length > 0;
     const ganttRows = gantt;
     const nowPct = (effectiveNowMin / 1440) * 100;
     const toastRoot = typeof document !== "undefined" ? document.getElementById("toast-root") : null;
@@ -423,25 +469,39 @@ export default function Tasks() {
             <div className="tasks-layout">
                 <div className="card yday-card tasks-yday">
                     <h3>Yesterday&apos;s review</h3>
-                    {yesterday.length > 0 ? (
-                        <div className="dump-cols">
-                            <div className="dump-col">
-                                <div className="dump-sec">✅ Done <span className="dump-n">{yDone.length}</span></div>
-                                {yDone.map((t) => <div className="task-li" key={t.id}><span className="title">{t.title}</span></div>)}
-                            </div>
-                            <div className="dump-col">
-                                <div className="dump-sec">😵 Missed <span className="dump-n">{yMiss.length}</span></div>
-                                {yMiss.map((t) => (
-                                    <div className="task-li" key={t.id}>
-                                        <span className="title">{t.title}</span>
-                                        <button type="button" className="act carry" onClick={() => carryToday(t.id)}>↓ To today</button>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="dump-empty">No tasks from yesterday yet — add a few to your board and get to work! 💪</div>
+                    {!hasYesterdayTasks && (
+                        <div className="dump-empty yday-hint">No tasks were scheduled for yesterday.</div>
                     )}
+                    <div className="dump-cols">
+                        <div className="dump-col">
+                            <div className="dump-sec">✅ Done <span className="dump-n">{yDone.length}</span></div>
+                            {yDone.length > 0
+                                ? yDone.map((t) => (
+                                    <div className="task-li" key={t.id}><span className="title">{t.title}</span></div>
+                                ))
+                                : <div className="dump-empty">Nothing completed yesterday.</div>}
+                        </div>
+                        <div className="dump-col">
+                            <div className="dump-sec">😵 Undone <span className="dump-n">{yUndone.length}</span></div>
+                            {yUndone.length > 0
+                                ? yUndone.map((t) => (
+                                    <div className="task-li" key={t.id}>
+                                        <span className="title-wrap">
+                                            {t.kind === "missed" && <span className="miss-flag" title="Missed block">😱</span>}
+                                            {t.kind === "open" && <span className="miss-flag" title="Unplanned">📋</span>}
+                                            <span className="title">{t.title}</span>
+                                        </span>
+                                        <div className="task-ctrls">
+                                            {t.kind === "missed" && (
+                                                <button type="button" className="act" onClick={() => confirmYesterdayDone(t.id)} title="Mark done">✅ Done</button>
+                                            )}
+                                            <button type="button" className="act carry" onClick={() => carryToday(t.id)}>↓ To today</button>
+                                        </div>
+                                    </div>
+                                ))
+                                : <div className="dump-empty">All clear — nice work!</div>}
+                        </div>
+                    </div>
                 </div>
 
                 <div className="card tasks-top-panel">
@@ -513,22 +573,31 @@ function TaskColumn({ label, tasks, nowMin, emptyText = "Nothing here", onEdit, 
             <div className="dump-sec">{label} <span className="dump-n">{tasks.length}</span></div>
             {tasks.length ? tasks.map((t) => {
                 const done = t.status === "done";
+                const scheduled = isScheduledToday(t) && !done;
+                const missed = scheduled && isMissed(t, nowMin);
+                const statusPill = done
+                    ? { cls: "st-done", label: "✅", title: "Done" }
+                    : missed
+                        ? { cls: "st-missed", label: "😱", title: "Missed" }
+                        : scheduled
+                            ? { cls: "st-sched", label: "📅", title: "Scheduled" }
+                            : null;
                 return (
                     <div className={`task-li${done ? " done" : ""}`} key={t.id} draggable={!done} onDragStart={(e) => !done && e.dataTransfer.setData("id", String(t.id))}>
                         <button type="button" className="star" onClick={() => onToggleImp(t.id)} disabled={done}>{t.imp ? "⭐" : "☆"}</button>
                         <div className="title-wrap">
-                            {isScheduledToday(t) && !done && <span className="gantt-sched-badge">Scheduled</span>}
                             <button type="button" className="title title-btn" onClick={() => onEdit(t)} title={t.description || t.title}>
                                 {t.title}
                             </button>
-                            {isScheduledToday(t) && !done && (
+                            {scheduled && (
                                 <span className="task-time-hint">{fmtTime(t.startMin)}–{fmtTime(t.endMin)}</span>
                             )}
                             {t.description && <span className="task-desc-hint" title={t.description}>📄</span>}
-                            {isMissed(t, nowMin) && !done && <span className="miss-flag">😱</span>}
                         </div>
                         <div className="task-ctrls">
-                            <span className={`wpill ${done ? "st-done" : "st-todo"}`}>{done ? "✅ Done" : "⭕ To do"}</span>
+                            {statusPill && (
+                                <span className={`wpill ${statusPill.cls}`} title={statusPill.title}>{statusPill.label}</span>
+                            )}
                             {!done && (
                                 <>
                                     <button type="button" className="act" onClick={() => onSetDone(t.id, true)} title="Mark done">✅</button>

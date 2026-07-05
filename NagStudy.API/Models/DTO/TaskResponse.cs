@@ -24,3 +24,15 @@ public class TaskBoardResponse
     public List<TaskResponse> Backlog { get; set; } = new();
     public List<TaskResponse> Gantt { get; set; } = new();
 }
+
+public class YesterdayUndoneTaskResponse : TaskResponse
+{
+    /// <summary>missed = had a Gantt block; open = planned but never scheduled.</summary>
+    public string Kind { get; set; } = "open";
+}
+
+public class YesterdayReviewResponse
+{
+    public List<TaskResponse> Done { get; set; } = new();
+    public List<YesterdayUndoneTaskResponse> Undone { get; set; } = new();
+}

@@ -130,6 +130,15 @@ public class TriggerService
         var yesterdayStart = todayStart.AddDays(-1);
         var tasks = await _db.Tasks.Where(t => t.UserId == userId).ToListAsync();
         var now = effectiveNowUtc ?? DateTime.UtcNow;
+        var todayMyt = TaskTimeHelper.TodayMyt();
+        var yesterdayMyt = todayMyt.AddDays(-1);
+        var yesterdayReview = YesterdayReviewHelper.Classify(tasks, yesterdayMyt);
+        var missedYesterday = yesterdayReview.Undone.Where(u => u.Kind == "missed").Select(u => u.Title).ToList();
+        var openYesterday = yesterdayReview.Undone.Where(u => u.Kind == "open").Select(u => u.Title).ToList();
+        var doneYesterday = yesterdayReview.Done.Count;
+        var todayTasks = tasks.Where(t => YesterdayReviewHelper.BelongsToScheduledMytDay(t, todayMyt)).ToList();
+        var todayTodo = todayTasks.Count(t => t.Status != "Done");
+        var todayUnscheduled = todayTasks.Count(t => t.Status != "Done" && t.StartTime == null);
         var todaySec = await _db.StudySessions
             .Where(s => s.UserId == userId && s.StartedAt >= todayStart)
             .SumAsync(s => s.Duration);
@@ -137,27 +146,15 @@ public class TriggerService
             .Where(s => s.UserId == userId && s.StartedAt >= yesterdayStart && s.StartedAt < todayStart)
             .SumAsync(s => s.Duration);
 
-        bool OnDay(StudyTask t, DateTime dayStartUtc, DateTime dayEndUtc) =>
-            (t.StartTime != null && t.StartTime >= dayStartUtc && t.StartTime < dayEndUtc)
-            || (t.StartTime == null && t.CreatedAt >= dayStartUtc && t.CreatedAt < dayEndUtc);
-
-        var yesterdayTasks = tasks.Where(t => OnDay(t, yesterdayStart, todayStart)).ToList();
-        var missedYesterday = yesterdayTasks
-            .Where(t => t.Status != "Done")
-            .Select(t => t.Title).ToList();
-        var doneYesterday = yesterdayTasks.Count(t => t.Status == "Done");
-        var todayTasks = tasks.Where(t => OnDay(t, todayStart, todayStart.AddDays(1))).ToList();
-        var todayTodo = todayTasks.Count(t => t.Status != "Done");
-        var todayUnscheduled = todayTasks.Count(t => t.Status != "Done" && t.StartTime == null);
-
         return trigger switch
         {
             "Manual" => $"Today focus: {todaySec / 60} min. Give a motivational nag.",
             "DayBrief" => $"""
-                Yesterday missed/ overdue tasks ({missedYesterday.Count}): {string.Join(", ", missedYesterday.Take(8))}
+                Yesterday done ({doneYesterday}): {string.Join(", ", yesterdayReview.Done.Select(t => t.Title).Take(8))}
+                Yesterday undone — missed blocks ({missedYesterday.Count}): {string.Join(", ", missedYesterday.Take(8))}
+                Yesterday undone — not scheduled ({openYesterday.Count}): {string.Join(", ", openYesterday.Take(8))}
                 Yesterday focus: {yesterdaySec / 60} minutes
-                Yesterday completed tasks: {doneYesterday}
-                Today total open tasks: {todayTodo} ({todayUnscheduled} not yet on Gantt)
+                Today total open tasks (scheduled for today): {todayTodo} ({todayUnscheduled} not yet on Gantt)
                 Today focus so far: {todaySec / 60} minutes
                 Summarize wins, misses, and one clear focus for today. Do not invent numbers.
                 """,
