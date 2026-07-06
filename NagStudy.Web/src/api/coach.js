@@ -21,5 +21,9 @@ export const triggerNag = (trigger, options = {}) =>
   });
 export const listNags = () => api.get("/coach/nags");
 
+export const listInsights = () => api.get("/coach/insights");
+export const createInsight = (body) => api.post("/coach/insights", body);
+export const deleteInsight = (id) => api.delete(`/coach/insights/${id}`);
+
 export const updateNagProfile = (profileId) => api.put("/users/me/nag-profile", { profileId });
 export const updateAiNotifications = (enabled) => api.put("/users/me/ai-notifications", { enabled });

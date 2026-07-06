@@ -4,6 +4,7 @@ import api from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import PasswordInput from "../components/PasswordInput";
 import { listProfiles, updateNagProfile, updateAiNotifications } from "../api/coach";
+import InsightsModal from "../components/InsightsModal";
 import { useRef } from "react";
 import { useTour } from "../context/useTour";
 import introJs from "intro.js";
@@ -49,6 +50,7 @@ export default function Settings() {
     const [savingPw, setSavingPw] = useState(false);
     const [aiMsg, setAiMsg] = useState({ text: "", ok: false });
     const [notifEnabled, setNotifEnabled] = useState(user?.aiNotificationsEnabled !== false);
+    const [insightsOpen, setInsightsOpen] = useState(false);
     const toastRoot = typeof document !== "undefined" ? document.getElementById("toast-root") : null;
 
     useEffect(() => {
@@ -169,6 +171,15 @@ export default function Settings() {
                         <input type="checkbox" checked={notifEnabled} onChange={toggleNotif} /> Enable automatic AI nags
                     </label>
                 </div>
+                <div className="set-field" id="settings-insights">
+                    <label>Saved insights</label>
+                    <p className="sub" style={{ margin: "4px 0 10px" }}>
+                        Age, education, habits, and interests the coach remembers (one atomic fact per entry).
+                    </p>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setInsightsOpen(true)}>
+                        💡 Manage insights
+                    </button>
+                </div>
                 {aiMsg.text && toastRoot && createPortal(
                     <div className="toast" style={{ borderLeftColor: aiMsg.ok ? "var(--green)" : "var(--coral)" }}>
                         <div className="ta">{aiMsg.ok ? "✅" : "⚠️"}</div>
@@ -180,6 +191,7 @@ export default function Settings() {
                     toastRoot
                 )}
             </div>
+            <InsightsModal open={insightsOpen} onClose={() => setInsightsOpen(false)} />
         </section>
     );
 }

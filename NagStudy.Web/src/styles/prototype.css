@@ -6994,6 +6994,25 @@ button {
   font-weight: 600;
 }
 
+.coach-gemini-insights-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink2);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.coach-gemini-insights-btn:hover {
+  background: var(--bg2);
+  border-color: var(--mint);
+}
+
 .coach-gemini-error {
   margin: 8px 20px 0;
   padding: 8px 12px;
@@ -7375,4 +7394,264 @@ button {
   flex: 1;
   min-width: 0;
   font-weight: 700;
+}
+
+/* ── Coach agent trace (Gemini-style tool / thinking panel) ── */
+.cgm-trace-row {
+  align-items: flex-start;
+}
+
+.cgm-trace-row .cgm-av {
+  margin-top: 4px;
+}
+
+.coach-agent-trace {
+  flex: 1;
+  max-width: min(640px, 85%);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 253, 249, 0.95), rgba(245, 242, 236, 0.6));
+  overflow: hidden;
+}
+
+.coach-agent-trace.loading {
+  border-color: rgba(111, 160, 122, 0.35);
+}
+
+.coach-trace-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink2);
+  text-align: left;
+}
+
+.coach-trace-toggle:disabled {
+  cursor: default;
+}
+
+.coach-trace-toggle-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.coach-trace-toggle-chevron {
+  margin-left: auto;
+  color: var(--txt3);
+  font-size: 11px;
+}
+
+.coach-trace-steps {
+  border-top: 1px solid var(--line);
+  padding: 6px 8px 10px;
+}
+
+.coach-trace-step {
+  border-radius: 10px;
+  margin-bottom: 4px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.coach-trace-step:last-child {
+  margin-bottom: 0;
+}
+
+.coach-trace-step-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: left;
+}
+
+.coach-trace-step-icon {
+  flex-shrink: 0;
+}
+
+.coach-trace-step-label {
+  flex-shrink: 0;
+}
+
+.coach-trace-step-args {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--txt3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.coach-trace-step-chevron {
+  margin-left: auto;
+  color: var(--txt3);
+  font-size: 10px;
+}
+
+.coach-trace-step-body {
+  padding: 0 10px 10px 32px;
+}
+
+.coach-trace-step-body pre {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+  color: var(--ink2);
+}
+
+.coach-trace-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--txt2);
+}
+
+.coach-trace-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mint);
+  animation: coachTracePulse 1.2s ease-in-out infinite;
+}
+
+@keyframes coachTracePulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+/* ── Insights manager modal ── */
+.insights-modal {
+  width: min(520px, 94vw);
+  max-height: min(80vh, 640px);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.insights-modal-head {
+  position: relative;
+  padding: 20px 20px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.insights-modal-head h3 {
+  margin: 0 0 6px;
+}
+
+.insights-modal-head .sub {
+  margin: 0;
+  padding-right: 28px;
+}
+
+.insights-close {
+  position: absolute;
+  top: 14px;
+  right: 12px;
+}
+
+.insights-add-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(245, 242, 236, 0.4);
+}
+
+.insights-add-form select {
+  flex: 0 0 140px;
+}
+
+.insights-add-form input {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.insights-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 20px 20px;
+}
+
+.insights-empty {
+  text-align: center;
+  padding: 24px 8px;
+}
+
+.insight-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.insight-row:last-child {
+  border-bottom: none;
+}
+
+.insight-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.insight-cat {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--violet);
+  margin-bottom: 4px;
+}
+
+.insight-text {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.insight-meta {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--txt3);
+}
+
+.insight-del {
+  flex-shrink: 0;
+  opacity: 0.65;
+}
+
+.insight-del:hover {
+  opacity: 1;
 }

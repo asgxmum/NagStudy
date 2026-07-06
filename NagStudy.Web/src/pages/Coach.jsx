@@ -8,6 +8,9 @@ import {
 } from "../api/coach";
 import { profileAvatar, userAvatarFromAuth } from "../utils/coachProfile";
 import CoachMessageBody from "../components/CoachMessageBody";
+import CoachAgentTrace from "../components/CoachAgentTrace";
+import InsightsModal from "../components/InsightsModal";
+import { groupCoachTimeline } from "../utils/coachAgentTrace";
 import { useNavigate } from "react-router-dom";
 import { useTour } from "../context/useTour";
 import introJs from "intro.js";
@@ -72,6 +75,7 @@ export default function Coach() {
     const [renameTarget, setRenameTarget] = useState(null);
     const [renameDraft, setRenameDraft] = useState("");
     const [renameSaving, setRenameSaving] = useState(false);
+    const [insightsOpen, setInsightsOpen] = useState(false);
     const logRef = useRef(null);
     const toolMenuRef = useRef(null);
     const sessionMenuRef = useRef(null);
@@ -266,13 +270,34 @@ export default function Coach() {
         setDraft("");
         setTyping(true);
         setError("");
-        setMessages((prev) => [...prev, { id: Date.now(), role: "User", messageType: "Chat", content: text, createdAt: new Date().toISOString() }]);
+        setMessages((prev) => {
+            const withoutTemp = prev.filter((m) => m.id !== "temp-user");
+            return [...withoutTemp, { id: "temp-user", role: "User", messageType: "Chat", content: text, createdAt: new Date().toISOString() }];
+        });
         try {
             const res = await sendChat(activeSession.id, text);
-            setMessages((prev) => [
-                ...prev,
-                { id: res.data.assistantMessageId, role: "Assistant", messageType: "Chat", content: res.data.reply, createdAt: new Date().toISOString() },
-            ]);
+            const toolMsgs = res.data.toolMessages ?? [];
+            const assistant = {
+                id: res.data.assistantMessageId,
+                role: "Assistant",
+                messageType: "Chat",
+                content: res.data.reply,
+                createdAt: new Date().toISOString(),
+                agentSteps: res.data.agentSteps ?? [],
+            };
+            setMessages((prev) => {
+                const base = prev.filter((m) => m.id !== "temp-user");
+                const withUser = base.map((m) =>
+                    m.role === "User" && m.content === text && typeof m.id !== "number"
+                        ? { ...m, id: res.data.userMessageId }
+                        : m
+                );
+                const hasUser = withUser.some((m) => m.id === res.data.userMessageId);
+                const next = hasUser
+                    ? withUser
+                    : [...withUser, { id: res.data.userMessageId, role: "User", messageType: "Chat", content: text, createdAt: new Date().toISOString() }];
+                return [...next, ...toolMsgs, assistant];
+            });
             listSessions().then((r) => setSessions(r.data)).catch(() => { });
         } catch (e) {
             setError(e.response?.data?.message ?? e.response?.data?.title ?? "Chat failed.");
@@ -374,6 +399,14 @@ export default function Coach() {
                                     </div>
                                     <div className="coach-gemini-header-sub">{activeSession.profileName}</div>
                                 </div>
+                                <button
+                                    type="button"
+                                    className="coach-gemini-insights-btn"
+                                    onClick={() => setInsightsOpen(true)}
+                                    title="Manage saved insights"
+                                >
+                                    💡 Insights
+                                </button>
                             </header>
 
                             {error && <p className="coach-gemini-error">{error}</p>}
@@ -397,16 +430,29 @@ export default function Coach() {
 
                             <div ref={logRef} className="coach-gemini-messages">
                                 {messages.length === 0 && (
-                                    <div className="coach-gemini-hint">Say hello to your coach — or use <b>+</b> for Summary / Schedule tools.</div>
+                                    <div className="coach-gemini-hint">Say hello to your coach — or use <b>+</b> for Summary tools.</div>
                                 )}
-                                {messages.map((msg) =>
-                                    msg.role === "User" ? (
-                                        <div key={msg.id} className="cgm-row user">
-                                            <div className="cgm-bubble">{msg.content}</div>
-                                            <img src={userAvatar} alt="" className="cgm-av" />
-                                        </div>
-                                    ) : (
-                                        <div key={msg.id} className="cgm-row assistant">
+                                {groupCoachTimeline(messages).map((item) => {
+                                    if (item.type === "trace") {
+                                        return (
+                                            <div className="cgm-row assistant cgm-trace-row" key={item.key}>
+                                                <img src={assistantAvatar(activeSession)} alt="" className="cgm-av" />
+                                                <CoachAgentTrace steps={item.steps} defaultExpanded={false} />
+                                            </div>
+                                        );
+                                    }
+                                    if (item.type === "user") {
+                                        const msg = item.msg;
+                                        return (
+                                            <div className="cgm-row user" key={item.key}>
+                                                <div className="cgm-bubble">{msg.content}</div>
+                                                <img src={userAvatar} alt="" className="cgm-av" />
+                                            </div>
+                                        );
+                                    }
+                                    const msg = item.msg;
+                                    return (
+                                        <div className="cgm-row assistant" key={item.key}>
                                             <img src={assistantAvatar(activeSession)} alt="" className="cgm-av" />
                                             <div className="cgm-bubble">
                                                 {msg.messageType === "Report" ? (
@@ -420,12 +466,12 @@ export default function Coach() {
                                                 <div className="cgm-time">{formatMsgTime(msg)}</div>
                                             </div>
                                         </div>
-                                    )
-                                )}
+                                    );
+                                })}
                                 {typing && (
-                                    <div className="cgm-row assistant">
+                                    <div className="cgm-row assistant cgm-trace-row">
                                         <img src={assistantAvatar(activeSession)} alt="" className="cgm-av" />
-                                        <div className="cgm-typing">{activeSession.profileName} is typing…</div>
+                                        <CoachAgentTrace loading steps={[]} />
                                     </div>
                                 )}
                             </div>
@@ -517,6 +563,8 @@ export default function Coach() {
                 </div>,
                 document.body
             )}
+
+            <InsightsModal open={insightsOpen} onClose={() => setInsightsOpen(false)} />
 
             {deleteTarget && createPortal(
                 <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
