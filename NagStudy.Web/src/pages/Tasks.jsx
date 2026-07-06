@@ -161,8 +161,7 @@ export default function Tasks() {
 
     useEffect(() => {
         setDebugNow(debugDragNow, debugNowMin);
-        if (debugDragNow && debugNowMin != null) checkTaskNudges(debugNowMin);
-    }, [debugDragNow, debugNowMin, setDebugNow, checkTaskNudges]);
+    }, [debugDragNow, debugNowMin, setDebugNow]);
 
     useEffect(() => {
         function onKey(e) {

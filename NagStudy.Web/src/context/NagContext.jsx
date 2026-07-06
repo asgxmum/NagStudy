@@ -3,7 +3,7 @@ import api from "../api/client";
 import { triggerNag } from "../api/coach";
 import { useAuth } from "./AuthContext";
 import { personas } from "../data/mock";
-import { fromApi, toApi, todayMytStr, isScheduledToday, nowMinutesMyt } from "../utils/taskMapper";
+import { fromApi, toApi, todayMytStr, isScheduledToday, nowMinutesMyt, isInTaskStartingWindow, isInTaskEndingWindow } from "../utils/taskMapper";
 import NagBubble from "../components/NagBubble";
 
 const NagContext = createContext(null);
@@ -39,6 +39,14 @@ export function NagProvider({ children }) {
   const debugNowRef = useRef({ enabled: false, min: null });
   const focusSnapshotRef = useRef(emptyFocusSnapshot());
   const taskUpdateListenersRef = useRef(new Set());
+  const activeNagRef = useRef(null);
+  const nudgeInFlightRef = useRef(false);
+  /** `${trigger}:${taskId}` → endMin when fired; prevents repeat while dragging through same window */
+  const taskNudgeFiredRef = useRef(new Map());
+
+  useEffect(() => {
+    activeNagRef.current = activeNag;
+  }, [activeNag]);
 
   const toneKey = user?.nagProfileKey ?? user?.aiTone ?? "Normal";
   const persona = personas.find((p) => p.key === toneKey) ?? personas[1];
@@ -73,6 +81,7 @@ export function NagProvider({ children }) {
 
   const fireTrigger = useCallback(async (trigger, options = {}) => {
     if (showingRef.current && !options.forceShow && trigger !== "Manual") return null;
+    if (nudgeInFlightRef.current && !options.forceShow && trigger !== "Manual") return null;
     if (showingRef.current && (trigger === "Manual" || options.forceShow)) {
       showingRef.current = false;
       setActiveNag(null);
@@ -83,6 +92,8 @@ export function NagProvider({ children }) {
     if (userInitiated) {
       showingRef.current = true;
       setActiveNag({ trigger, loading: true });
+    } else {
+      nudgeInFlightRef.current = true;
     }
     try {
       const res = await triggerNag(trigger, buildTriggerPayload(trigger, options));
@@ -92,6 +103,8 @@ export function NagProvider({ children }) {
     } catch {
       if (userInitiated) { setActiveNag(null); showingRef.current = false; }
       return null;
+    } finally {
+      if (!userInitiated) nudgeInFlightRef.current = false;
     }
   }, [showFromResponse, buildTriggerPayload]);
 
@@ -139,9 +152,14 @@ export function NagProvider({ children }) {
   }, []);
 
   const checkTaskNudges = useCallback(async (nowOverride) => {
-    if (showingRef.current) return;
+    if (nudgeInFlightRef.current) return;
     const nowMin = nowOverride ?? effectiveNowMin(debugNowRef);
     const todayStr = todayMytStr();
+    const debugPayload = debugNowRef.current.enabled && debugNowRef.current.min != null
+      ? { debugNowMinutes: debugNowRef.current.min }
+      : nowOverride != null
+        ? { debugNowMinutes: nowOverride }
+        : {};
 
     try {
       const res = await api.get("/tasks/board");
@@ -154,25 +172,41 @@ export function NagProvider({ children }) {
           return true;
         });
 
+      const active = activeNagRef.current;
+      if (active?.trigger === "TaskEnded" && active.taskId) {
+        const nagTask = all.find((t) => t.id === active.taskId);
+        if (!nagTask || !isInTaskEndingWindow(nagTask, nowMin)) {
+          dismissNag();
+        }
+      }
+
+      if (showingRef.current) return;
+
       for (const t of all) {
         if (t.status === "done" || t.dateStr !== todayStr) continue;
-        if (t.status !== "scheduled" && t.startMin == null) continue;
+        if (!isScheduledToday(t) || t.startMin == null) continue;
 
-        if (isScheduledToday(t) && t.endMin != null && t.endMin <= nowMin) {
-          await fireTrigger("TaskEnded", { taskId: t.id });
+        const startKey = `TaskStarting:${t.id}`;
+        const endKey = `TaskEnded:${t.id}`;
+        if (t.endMin != null && nowMin < t.endMin) taskNudgeFiredRef.current.delete(endKey);
+        if (t.startMin != null && nowMin < t.startMin - 2) taskNudgeFiredRef.current.delete(startKey);
+
+        if (isInTaskStartingWindow(t, nowMin)) {
+          if (taskNudgeFiredRef.current.get(startKey) === t.startMin) continue;
+          const data = await fireTrigger("TaskStarting", { taskId: t.id, ...debugPayload });
+          if (data?.shouldShow) taskNudgeFiredRef.current.set(startKey, t.startMin);
           return;
         }
 
-        if (t.startMin != null && isScheduledToday(t)) {
-          const until = t.startMin - nowMin;
-          if (until <= 2 && until >= -2) {
-            await fireTrigger("TaskStarting", { taskId: t.id });
-            return;
-          }
+        if (isInTaskEndingWindow(t, nowMin)) {
+          if (taskNudgeFiredRef.current.get(endKey) === t.endMin) continue;
+          const data = await fireTrigger("TaskEnded", { taskId: t.id, ...debugPayload });
+          if (data?.shouldShow) taskNudgeFiredRef.current.set(endKey, t.endMin);
+          return;
         }
       }
     } catch { /* ignore */ }
-  }, [fireTrigger]);
+  }, [fireTrigger, dismissNag]);
 
   // Boot: DayBrief once per browser session (F5 keeps sessionStorage → no re-show; logout clears key)
   useEffect(() => {

@@ -205,5 +205,20 @@ export const fmtTime = (m) =>
 export const isOnGantt = (t) => t.startMin != null && (t.status === "scheduled" || t.status === "done");
 export const isMissed = (t, now) => t.status === "scheduled" && t.endMin !== null && t.endMin < now;
 
+/** ±2 min around scheduled Gantt start (MYT minutes). */
+export function isInTaskStartingWindow(t, nowMin) {
+  if (t.startMin == null) return false;
+  const until = t.startMin - nowMin;
+  return until <= 2 && until >= -2;
+}
+
+/** Only after block start and within 5 min after scheduled end (matches server poll cadence). */
+export function isInTaskEndingWindow(t, nowMin) {
+  if (t.startMin == null || t.endMin == null) return false;
+  if (nowMin < t.startMin) return false;
+  const since = nowMin - t.endMin;
+  return since >= 0 && since <= 5;
+}
+
 /** Blank task for the add popover */
 export const NEW_TASK = { color: null, status: "inbox" };
