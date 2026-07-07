@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NagStudy.API.Data;
 using NagStudy.API.Extensions;
+using NagStudy.API.Infrastructure;
 
 namespace NagStudy.API.Controllers;
 
@@ -79,6 +80,12 @@ public class DashboardController : ControllerBase
             .OrderBy(x => x.Date)
             .ToList();
 
-        return Ok(new { todaySeconds, weekSeconds, byCategory, byDay });
+        var todayMyt = TaskTimeHelper.TodayMyt();
+        var userTasks = await _db.Tasks.Where(t => t.UserId == CurrentUserId).ToListAsync();
+        var nowUtc = DateTime.UtcNow;
+        var todayDoneCount = YesterdayReviewHelper.CountTodayDone(userTasks, todayMyt);
+        var todayMissedCount = YesterdayReviewHelper.CountTodayMissed(userTasks, todayMyt, nowUtc);
+
+        return Ok(new { todaySeconds, weekSeconds, byCategory, byDay, todayDoneCount, todayMissedCount });
     }
 }

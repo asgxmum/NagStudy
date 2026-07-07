@@ -12,8 +12,8 @@ using NagStudy.API.Data;
 namespace NagStudy.API.Migrations
 {
     [DbContext(typeof(NagStudyContext))]
-    [Migration("20260614145016_InitialCreate")]
-    partial class InitialCreate
+    [Migration("20260627091148_InitialMigration")]
+    partial class InitialMigration
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -139,6 +139,9 @@ namespace NagStudy.API.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("Color")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("datetime2");
 
@@ -197,7 +200,7 @@ namespace NagStudy.API.Migrations
 
                     b.Property<string>("Nickname")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -214,6 +217,9 @@ namespace NagStudy.API.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.HasIndex("Nickname")
                         .IsUnique();
 
                     b.ToTable("Users");

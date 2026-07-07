@@ -5,6 +5,7 @@ import "./index.css";
 import "./styles/prototype.css"; // exact prototype design (reused verbatim)
 import App from "./App.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
+import "./styles/tour.css";
 
 // W4: createRoot + StrictMode · W7: BrowserRouter wraps the app
 createRoot(document.getElementById("root")).render(

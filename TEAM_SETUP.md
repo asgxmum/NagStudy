@@ -1,0 +1,100 @@
+# temp 分支 — 队友启动指南
+
+合并 `temp` 到本地后，按顺序做一次即可跑通 AI / Coach / Trigger 功能。
+
+## 0. .NET SDK 版本（⚠️ 先看这条，否则所有 `dotnet` 命令会报错）
+
+`global.json` 锁定了 SDK 版本。如果本机没有对应版本，`dotnet user-secrets` / `dotnet run` 会报
+`A compatible .NET SDK was not found … Requested SDK version: 10.0.xxx`。
+
+两种解决办法，任选其一：
+
+- **（推荐）改 `global.json` 成自己装的版本**：用 `dotnet --list-sdks` 看本机版本，把
+  `global.json` 里的 `"version"` 改成那个号（例如本机是 `10.0.201` 就写 `10.0.201`）。
+- 或者去 <https://dotnet.microsoft.com/download> 装 `global.json` 要求的那个 SDK。
+
+> 当前仓库里 `global.json` 已设为 `10.0.201`。装了更高版本也能跑（`rollForward: latestFeature`）。
+
+## 1. 拉分支
+
+```powershell
+git fetch origin
+git checkout temp
+```
+
+## 2. user-secrets（每人本地配置，**不会进 Git**）
+
+在 `NagStudy.API/` 目录：
+
+```powershell
+# 必填 — 后端 JWT
+dotnet user-secrets set "Jwt:Key" "$([Convert]::ToBase64String((1..48 | % { Get-Random -Maximum 256 })))"
+
+# 必填 — 种子管理员（团队统一）
+dotnet user-secrets set "Admin:Password" "SWE310Admin@Team1"
+
+# 必填 — RAG Embedding + 可选 Chat（Gemini）
+dotnet user-secrets set "Gemini:ApiKey" "YOUR_GEMINI_KEY"
+
+# 可选 — 聊天 Provider（默认 appsettings 里 Llm:Provider=Gemini）
+# 若用 MiniMax：
+dotnet user-secrets set "Llm:Provider" "MiniMax"
+dotnet user-secrets set "MiniMax:ApiKey" "sk-cp-..."
+# 中国区 Token Plan 需匹配 BaseUrl：
+dotnet user-secrets set "MiniMax:BaseUrl" "https://api.minimaxi.com/v1"
+```
+
+查看已配置：`dotnet user-secrets list`
+
+## 3. 数据库连接字符串
+
+编辑 `NagStudy.API/appsettings.json`，把 `YOUR_SQL_SERVER` 改成自己机器的 SQL Server 实例名（**改完不要 commit**）。
+
+## 4. 运行
+
+```powershell
+# 终端 1 — API
+cd NagStudy.API
+dotnet run
+
+# 终端 2 — 前端
+cd NagStudy.Web
+npm install
+npm run dev
+```
+
+- API：`https://localhost:5178/api`
+- 前端：`http://localhost:5173`
+
+> ⚠️ **`npm install` 一定要跑**：本分支前端新增了几个依赖 —— **gsap**（顶部导航 hover sweep 动画）、
+> **intro.js**（新手引导 tour），以及任务弹窗时间选择器用的 **MUI** 一套（`@mui/material`、
+> `@mui/x-date-pickers`、`@emotion/react`、`@emotion/styled`、`dayjs`，共 5 个）。不装会报
+> `Failed to resolve import "..."`，前端直接起不来。全部都在 `package.json` 里，`npm install` 会自动装。
+
+## 5. 演示账号
+
+| 角色 | 邮箱 | 密码 |
+|------|------|------|
+| 演示学生 | `focusfox@xmu.edu.my` | `Demo@1234` |
+| 管理员 | `SWE310admin@nagstudy.app` | user-secrets 里的 `Admin:Password` |
+
+## 6. 数据库说明
+
+- 不用 `dotnet ef`，首次 `dotnet run` 自动建表。
+- 从旧库升级若缺 `UserActivities` 表：重启 API 会自动补建；或删库 `NagStudyDb` 重建。
+- ⚠️ **本分支给 `Users` 表加了一列 `HasSeenTutorial`**（bit，默认 0）—— 用来记住用户看没看过新手引导 tour，
+  否则每次登录都会重新弹引导。它已写进 `User.cs` 实体，但 `EnsureCreated` **不会给已存在的表补列**，所以：
+  - **全新库**：首次 `dotnet run` 自动带上这列，无需操作。
+  - **已有旧 `NagStudyDb`**：要么删库 `NagStudyDb` 重建，要么在 SSMS 手动补列：
+
+    ```sql
+    ALTER TABLE Users ADD HasSeenTutorial bit NOT NULL DEFAULT 0;
+    ```
+
+  不加这列，登录读 `/api/users/me` 时会报 `Invalid column name 'HasSeenTutorial'`。
+
+## 7. 未纳入 Git 的文件
+
+- `Description_Group_Project.pdf` — 已 gitignore
+- API Key / JWT / Admin 密码 — 仅在 user-secrets
+- `NagStudy.slnx` — VS 解决方案文件，可保留，无敏感信息

@@ -5,6 +5,7 @@ using NagStudy.API.Data;
 using NagStudy.API.Models.Domain;
 using NagStudy.API.Models.DTO;
 using NagStudy.API.Extensions;
+using NagStudy.API.Services;
 
 namespace NagStudy.API.Controllers;
 
@@ -14,9 +15,12 @@ namespace NagStudy.API.Controllers;
 public class StudySessionsController : ControllerBase
 {
     private readonly NagStudyContext _db;
-    public StudySessionsController(NagStudyContext db)
+    private readonly RagService _rag;
+
+    public StudySessionsController(NagStudyContext db, RagService rag)
     {
         _db = db;
+        _rag = rag;
     }
 
     private int CurrentUserId => User.GetUserId();
@@ -77,6 +81,11 @@ public class StudySessionsController : ControllerBase
         };
         _db.StudySessions.Add(session);
         await _db.SaveChangesAsync();
+        var taskTitle = request.TaskId != null
+            ? await _db.Tasks.Where(t => t.Id == request.TaskId).Select(t => t.Title).FirstOrDefaultAsync()
+            : null;
+        _rag.IndexDocumentFireAndForget(CurrentUserId, "StudySession", session.Id,
+            RagService.FormatSession(session, taskTitle));
         return CreatedAtAction(nameof(GetOne), new { id = session.Id }, session);
     }
 

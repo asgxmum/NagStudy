@@ -17,7 +17,7 @@ namespace NagStudy.API.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.5")
+                .HasAnnotation("ProductVersion", "10.0.9")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -58,7 +58,7 @@ namespace NagStudy.API.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("AIFeedbacks");
+                    b.ToTable("AIFeedbacks", (string)null);
                 });
 
             modelBuilder.Entity("NagStudy.API.Models.Domain.Category", b =>
@@ -88,7 +88,7 @@ namespace NagStudy.API.Migrations
                     b.HasIndex("UserId", "Name")
                         .IsUnique();
 
-                    b.ToTable("Categories");
+                    b.ToTable("Categories", (string)null);
                 });
 
             modelBuilder.Entity("NagStudy.API.Models.Domain.StudySession", b =>
@@ -125,7 +125,7 @@ namespace NagStudy.API.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("StudySessions");
+                    b.ToTable("StudySessions", (string)null);
                 });
 
             modelBuilder.Entity("NagStudy.API.Models.Domain.StudyTask", b =>
@@ -173,7 +173,7 @@ namespace NagStudy.API.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Tasks");
+                    b.ToTable("Tasks", (string)null);
                 });
 
             modelBuilder.Entity("NagStudy.API.Models.Domain.User", b =>
@@ -219,7 +219,7 @@ namespace NagStudy.API.Migrations
                     b.HasIndex("Nickname")
                         .IsUnique();
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", (string)null);
                 });
 
             modelBuilder.Entity("NagStudy.API.Models.Domain.AIFeedback", b =>

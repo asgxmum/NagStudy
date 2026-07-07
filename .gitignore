@@ -14,6 +14,10 @@ dist-ssr/
 *.local
 .vite/
 
+# ── Local / course materials — do not commit ──
+Description_Group_Project.pdf
+document/
+
 # ── Logs & env ──
 *.log
 .env

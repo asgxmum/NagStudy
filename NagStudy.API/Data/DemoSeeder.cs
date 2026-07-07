@@ -156,22 +156,40 @@ public static class DemoSeeder
             },
         };
 
+        // Actual-yesterday window (MYT → UTC). A fresh demo board always has yesterday tasks;
+        // if this user has none, the board was seeded on an earlier day and has drifted out of
+        // Today / Gantt / "Yesterday's review" — clear it and reseed with current dates so the
+        // demo boards stay populated every day.
+        var yStartUtc = todayMyt.AddDays(-1).AddHours(-8);
+        var yEndUtc = todayMyt.AddHours(-8);
+
         foreach (var (nick, specs) in boards)
         {
             var user = db.Users.FirstOrDefault(u => u.Nickname == nick && u.Role == "User");
             if (user == null) continue;
-            if (db.Tasks.Any(t => t.UserId == user.Id)) continue; // idempotent per user
+
+            var existing = db.Tasks.Where(t => t.UserId == user.Id).ToList();
+            if (existing.Any(t => t.ScheduledDate != null
+                                    && t.ScheduledDate >= yStartUtc
+                                    && t.ScheduledDate < yEndUtc)) continue; // still current
+            if (existing.Count > 0) db.Tasks.RemoveRange(existing);
 
             foreach (var p in specs)
             {
+                var dayMyt = todayMyt.AddDays(p.Day);
                 DateTime? start = null, end = null, completed = null;
                 if (p.Sh.HasValue)
                 {
-                    var dayMyt = todayMyt.AddDays(p.Day);
-                    start = dayMyt.AddHours(p.Sh.Value).AddHours(-8);             // MYT wall-clock -> UTC
+                    start = dayMyt.AddHours(p.Sh.Value).AddHours(-8);
                     end   = dayMyt.AddHours(p.Eh ?? p.Sh.Value + 1).AddHours(-8);
                 }
                 if (p.Done) completed = end ?? now;
+
+                DateTime? scheduledDate = null;
+                if (p.Sh.HasValue)
+                    scheduledDate = dayMyt.AddHours(-8);
+                else if (!string.Equals(p.When, "Later", StringComparison.OrdinalIgnoreCase))
+                    scheduledDate = dayMyt.AddHours(-8);
 
                 db.Tasks.Add(new StudyTask
                 {
@@ -179,14 +197,64 @@ public static class DemoSeeder
                     Title = p.Title,
                     IsImportant = p.Imp,
                     When = p.When,
+                    ScheduledDate = scheduledDate,
                     Status = p.Status,
                     StartTime = start,
                     EndTime = end,
                     CompletedAt = completed,
-                    CreatedAt = now.AddDays(p.Day), // brain-dump tasks belong to their day via CreatedAt
+                    CreatedAt = now.AddDays(p.Day),
                 });
             }
             db.SaveChanges();
         }
+    }
+
+    /// <summary>
+    /// Keeps the demo leaderboard alive across week boundaries. Runs every startup:
+    /// if a seeded demo user has no StudySession in the CURRENT week, backfill this
+    /// week from their weekly pattern. Idempotent per week; only touches demo users.
+    /// </summary>
+    public static void TopUpCurrentWeek(NagStudyContext db)
+    {
+        var now = DateTime.UtcNow;
+        var nowMyt = now.AddHours(8);
+        int daysSinceMonday = ((int)nowMyt.DayOfWeek + 6) % 7;
+        var weekStartUtc = nowMyt.Date.AddDays(-daysSinceMonday).AddHours(-8);
+
+        var patterns = new (string Email, int[] Week)[]
+        {
+            ("focusfox@xmu.edu.my",  new[] { 50, 40, 60, 45, 55, 30, 70 }),
+            ("studystar@xmu.edu.my", new[] { 30, 45,  0, 60, 25, 50,  0 }),
+            ("snoozebun@xmu.edu.my", new[] { 25,  0, 35, 20,  0, 40, 15 }),
+            ("lazylamb@xmu.edu.my",  new[] { 20,  0,  0, 15,  0,  0, 10 }),
+            ("nightowl@xmu.edu.my",  new[] { 90,  0, 30,  0, 45,  0, 80 }),
+        };
+
+        var added = false;
+        foreach (var (email, week) in patterns)
+        {
+            var user = db.Users.FirstOrDefault(u => u.Email == email && u.Role == "User");
+            if (user == null) continue;
+            // already has this week's data → skip (idempotent per week)
+            if (db.StudySessions.Any(s => s.UserId == user.Id && s.StartedAt >= weekStartUtc)) continue;
+
+            var catIds = db.Categories.Where(c => c.UserId == user.Id).Select(c => c.Id).ToList();
+            if (catIds.Count == 0) continue;
+
+            for (int day = 0; day < 7; day++)
+            {
+                if (week[day] == 0) continue;
+                db.StudySessions.Add(new StudySession
+                {
+                    UserId = user.Id,
+                    CategoryId = catIds[day % catIds.Count],
+                    StartedAt = weekStartUtc.AddDays(day).AddHours(10),
+                    Duration = week[day] * 60,
+                    CreatedAt = now
+                });
+                added = true;
+            }
+        }
+        if (added) db.SaveChanges();
     }
 }
