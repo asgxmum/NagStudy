@@ -413,14 +413,17 @@ export default function Tasks() {
         function minFromEvent(ev) {
             const x = ev.clientX - rect.left;
             const frac = Math.min(Math.max(x / rect.width, 0), 1);
-            return Math.round((frac * 1440) / 5) * 5;
+            return Math.round(frac * 1440);
         }
         setDebugNowMin(minFromEvent(e));
         function onMove(ev) { setDebugNowMin(minFromEvent(ev)); }
-        function onUp() {
+        function onUp(ev) {
             window.removeEventListener("pointermove", onMove);
             window.removeEventListener("pointerup", onUp);
-            checkTaskNudges();
+            const finalMin = minFromEvent(ev);
+            setDebugNowMin(finalMin);
+            setDebugNow(true, finalMin);
+            checkTaskNudges(finalMin);
         }
         window.addEventListener("pointermove", onMove);
         window.addEventListener("pointerup", onUp);
