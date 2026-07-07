@@ -17,12 +17,10 @@ namespace NagStudy.API.Controllers;
 public class TasksController : ControllerBase
 {
     private readonly NagStudyContext _db;
-    private readonly RagService _rag;
 
-    public TasksController(NagStudyContext db, RagService rag)
+    public TasksController(NagStudyContext db)
     {
         _db = db;
-        _rag = rag;
     }
 
     private int CurrentUserId => User.GetUserId();
@@ -118,7 +116,6 @@ public class TasksController : ControllerBase
         if (task.EndTime != prevEnd)
             task.EndPromptSentAt = null;
         await _db.SaveChangesAsync();
-        _rag.SyncTaskIndexFireAndForget(CurrentUserId, task);
         return Ok(TaskMapper.ToResponse(task));
     }
 
@@ -130,7 +127,6 @@ public class TasksController : ControllerBase
 
         _db.Tasks.Remove(task);
         await _db.SaveChangesAsync();
-        _rag.DeleteDocumentFireAndForget(CurrentUserId, "Task", task.Id);
         return NoContent();
     }
 }

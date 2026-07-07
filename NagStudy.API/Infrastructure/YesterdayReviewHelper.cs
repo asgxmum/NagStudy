@@ -4,11 +4,11 @@ using NagStudy.API.Services;
 
 namespace NagStudy.API.Infrastructure;
 
-/// <summary>Unified rules for Yesterday's Review — tasks belong to a MYT day via ScheduledDate only.</summary>
+/// <summary>Unified rules for Yesterday's Review — planned MYT day via ScheduledDate.</summary>
 public static class YesterdayReviewHelper
 {
     public static bool BelongsToScheduledMytDay(StudyTask t, DateTime dayMyt) =>
-        t.ScheduledDate != null && t.ScheduledDate.Value.AddHours(8).Date == dayMyt.Date;
+        TaskTimeHelper.BelongsToPlannedMytDay(t, dayMyt);
 
     public static bool IsUndoneMissed(StudyTask t) =>
         !string.Equals(t.Status, "Done", StringComparison.OrdinalIgnoreCase) && t.StartTime != null;

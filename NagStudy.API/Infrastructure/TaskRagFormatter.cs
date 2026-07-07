@@ -34,10 +34,10 @@ public static class TaskRagFormatter
 
 
 
-    /// <summary>Agent search_task_history line — includes completion status and duration.</summary>
-    public static string FormatForHistory(StudyTask t)
+    /// <summary>Agent get_tasks line — planned day (ScheduledDate); StartTime/EndTime are Gantt block only.</summary>
+    public static string FormatForTasks(StudyTask t)
     {
-        var date = ResolveTaskDate(t);
+        var date = TaskTimeHelper.GetPlannedMytDate(t) ?? DateTime.MinValue;
         var start = t.StartTime?.AddHours(8).ToString("HH:mm") ?? "--:--";
         var end = t.EndTime?.AddHours(8).ToString("HH:mm") ?? "--:--";
         var duration = FormatDuration(t);
@@ -54,6 +54,7 @@ public static class TaskRagFormatter
 
 
 
+    /// <summary>Legacy fallback chain — do not use for day filters; use TaskTimeHelper.BelongsToPlannedMytDay.</summary>
     public static DateTime ResolveTaskDate(StudyTask t)
 
     {
@@ -92,9 +93,8 @@ public static class TaskRagFormatter
 
 
 
-    public static string FormatActivity(UserActivity a) =>
-
-        $"Activity: [{a.RecordedAt.AddHours(8):yyyy-MM-dd} {a.Summary.Trim()}]";
+    public static string FormatInsight(UserInsight i) =>
+        $"Insight [{i.Category}]: [{i.RecordedAt.AddHours(8):yyyy-MM-dd}] {i.Summary.Trim()}";
 
 }
 

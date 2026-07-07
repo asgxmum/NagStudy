@@ -4130,6 +4130,11 @@ button {
     transform: translateY(-1px)
   }
 
+  .gnow-btn-active {
+    background: rgba(232, 115, 74, .22);
+    box-shadow: 0 0 0 2px rgba(232, 115, 74, .35);
+  }
+
   .gnav {
     position: absolute;
     top: 50%;

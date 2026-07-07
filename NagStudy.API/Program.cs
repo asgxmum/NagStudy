@@ -23,6 +23,7 @@ builder.Services.AddScoped<CoachKernelFactory>();
 builder.Services.AddSingleton<CoachFunctionInvocationFilter>();
 builder.Services.AddScoped<GeminiEmbeddingService>();
 builder.Services.AddScoped<RagService>();
+builder.Services.AddScoped<CoachReportGenerator>();
 builder.Services.AddScoped<CoachService>();
 builder.Services.AddScoped<TriggerService>();
 

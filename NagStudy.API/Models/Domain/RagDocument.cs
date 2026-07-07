@@ -6,7 +6,7 @@ public class RagDocument
     public int UserId { get; set; }
     public User User { get; set; } = null!;
 
-    /// <summary>ChatMessage | Task | StudySession | Report | Activity</summary>
+    /// <summary>Insight only — vector embeddings for durable user facts.</summary>
     public string SourceType { get; set; } = string.Empty;
     public int SourceId { get; set; }
     public string Content { get; set; } = string.Empty;

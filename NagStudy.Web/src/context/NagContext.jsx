@@ -182,26 +182,32 @@ export function NagProvider({ children }) {
 
       if (showingRef.current) return;
 
-      for (const t of all) {
-        if (t.status === "done" || t.dateStr !== todayStr) continue;
-        if (!isScheduledToday(t) || t.startMin == null) continue;
+      const eligible = all.filter((t) => {
+        if (t.status === "done" || t.dateStr !== todayStr) return false;
+        if (!isScheduledToday(t) || t.startMin == null) return false;
+        return true;
+      });
 
-        const startKey = `TaskStarting:${t.id}`;
+      for (const t of eligible) {
         const endKey = `TaskEnded:${t.id}`;
-        if (t.endMin != null && nowMin < t.endMin) taskNudgeFiredRef.current.delete(endKey);
-        if (t.startMin != null && nowMin < t.startMin - 2) taskNudgeFiredRef.current.delete(startKey);
-
-        if (isInTaskStartingWindow(t, nowMin)) {
-          if (taskNudgeFiredRef.current.get(startKey) === t.startMin) continue;
-          const data = await fireTrigger("TaskStarting", { taskId: t.id, ...debugPayload });
-          if (data?.shouldShow) taskNudgeFiredRef.current.set(startKey, t.startMin);
-          return;
+        if (t.endMin != null && (nowMin < t.endMin || nowMin > t.endMin + 10)) {
+          taskNudgeFiredRef.current.delete(endKey);
         }
-
         if (isInTaskEndingWindow(t, nowMin)) {
           if (taskNudgeFiredRef.current.get(endKey) === t.endMin) continue;
           const data = await fireTrigger("TaskEnded", { taskId: t.id, ...debugPayload });
           if (data?.shouldShow) taskNudgeFiredRef.current.set(endKey, t.endMin);
+          return;
+        }
+      }
+
+      for (const t of eligible) {
+        const startKey = `TaskStarting:${t.id}`;
+        if (t.startMin != null && nowMin < t.startMin - 2) taskNudgeFiredRef.current.delete(startKey);
+        if (isInTaskStartingWindow(t, nowMin)) {
+          if (taskNudgeFiredRef.current.get(startKey) === t.startMin) continue;
+          const data = await fireTrigger("TaskStarting", { taskId: t.id, ...debugPayload });
+          if (data?.shouldShow) taskNudgeFiredRef.current.set(startKey, t.startMin);
           return;
         }
       }

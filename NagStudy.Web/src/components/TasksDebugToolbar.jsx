@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useNag } from "../context/NagContext";
 
 /**
- * Dev toolbar — Ctrl+Shift+` on Tasks page.
+ * Dev toolbar — F9 on Tasks page.
  * @param {{ open: boolean, onClose: () => void, dragNowLine: boolean, onDragNowLineChange: (v: boolean) => void }} props
  */
 export default function TasksDebugToolbar({ open, onClose, dragNowLine, onDragNowLineChange }) {
@@ -34,7 +34,7 @@ export default function TasksDebugToolbar({ open, onClose, dragNowLine, onDragNo
     <div className="tasks-debug-bar" role="dialog" aria-label="Tasks debug toolbar">
       <div className="tasks-debug-head">
         <strong>Tasks debug</strong>
-        <span className="sub">Ctrl+Shift+`</span>
+        <span className="sub">F9</span>
         <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>✕</button>
       </div>
       <label className="tasks-debug-row">
@@ -56,10 +56,16 @@ export default function TasksDebugToolbar({ open, onClose, dragNowLine, onDragNo
   );
 }
 
-export const DEBUG_HOTKEY_LABEL = "Ctrl+Shift+`";
+/** Primary hotkey — avoids Ctrl+Shift (IME switch on Chinese Windows). */
+export const DEBUG_HOTKEY_LABEL = "Ctrl+Alt+D";
 
 export function isTasksDebugHotkey(e) {
-  if (!e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return false;
-  if (e.code === "Backquote") return true;
-  return e.key === "`" || e.key === "~";
+  if (e.metaKey) return false;
+  // Primary: Ctrl+Alt+D (does not conflict with input-method switch)
+  if (e.ctrlKey && e.altKey && !e.shiftKey) {
+    if (e.code === "KeyD" || e.key === "d" || e.key === "D") return true;
+  }
+  // Demo fallback when modifiers are captured by OS / recorder
+  if (!e.ctrlKey && !e.altKey && !e.shiftKey && e.code === "F9") return true;
+  return false;
 }

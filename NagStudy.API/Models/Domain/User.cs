@@ -28,5 +28,5 @@ public class User
     public ICollection<AgentProfile> CustomProfiles { get; set; } = new List<AgentProfile>();
     public ICollection<ChatSession> ChatSessions { get; set; } = new List<ChatSession>();
     public ICollection<RagDocument> RagDocuments { get; set; } = new List<RagDocument>();
-    public ICollection<UserActivity> UserActivities { get; set; } = new List<UserActivity>();
+    public ICollection<UserInsight> UserInsights { get; set; } = new List<UserInsight>();
 }

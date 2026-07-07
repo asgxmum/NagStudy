@@ -8,6 +8,8 @@ namespace NagStudy.API.Services;
 
 public class RagService
 {
+    public const string InsightSourceType = "Insight";
+
     private readonly NagStudyContext _db;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly GeminiEmbeddingService _embedding;
@@ -25,7 +27,7 @@ public class RagService
         _logger = logger;
     }
 
-    public void IndexDocumentFireAndForget(int userId, string sourceType, int sourceId, string content)
+    public void IndexInsightFireAndForget(int userId, int insightId, string content)
     {
         if (string.IsNullOrWhiteSpace(content)) return;
         _ = Task.Run(async () =>
@@ -34,13 +36,13 @@ public class RagService
             {
                 using var scope = _scopeFactory.CreateScope();
                 var rag = scope.ServiceProvider.GetRequiredService<RagService>();
-                await rag.UpsertDocumentAsync(userId, sourceType, sourceId, content);
+                await rag.UpsertDocumentAsync(userId, InsightSourceType, insightId, content);
             }
-            catch (Exception ex) { _logger.LogWarning(ex, "RAG index failed for {Type}/{Id}", sourceType, sourceId); }
+            catch (Exception ex) { _logger.LogWarning(ex, "RAG insight index failed for {Id}", insightId); }
         });
     }
 
-    public void DeleteDocumentFireAndForget(int userId, string sourceType, int sourceId)
+    public void DeleteInsightFireAndForget(int userId, int insightId)
     {
         _ = Task.Run(async () =>
         {
@@ -48,19 +50,10 @@ public class RagService
             {
                 using var scope = _scopeFactory.CreateScope();
                 var rag = scope.ServiceProvider.GetRequiredService<RagService>();
-                await rag.DeleteDocumentAsync(userId, sourceType, sourceId);
+                await rag.DeleteDocumentAsync(userId, InsightSourceType, insightId);
             }
-            catch (Exception ex) { _logger.LogWarning(ex, "RAG delete failed for {Type}/{Id}", sourceType, sourceId); }
+            catch (Exception ex) { _logger.LogWarning(ex, "RAG insight delete failed for {Id}", insightId); }
         });
-    }
-
-    /// <summary>Index completed tasks only; remove from RAG when not done.</summary>
-    public void SyncTaskIndexFireAndForget(int userId, StudyTask task)
-    {
-        if (TaskRagFormatter.IsDone(task))
-            IndexDocumentFireAndForget(userId, "Task", task.Id, FormatTask(task));
-        else
-            DeleteDocumentFireAndForget(userId, "Task", task.Id);
     }
 
     public async Task UpsertDocumentAsync(int userId, string sourceType, int sourceId, string content)
@@ -99,13 +92,13 @@ public class RagService
         await _db.SaveChangesAsync();
     }
 
-    public async Task<string> SearchAsync(int userId, string query, int topK = 5)
+    public async Task<string> SearchInsightsAsync(int userId, string query, int topK = 5)
     {
         var queryVec = await _embedding.EmbedAsync(query);
         if (queryVec == null) return "";
 
         var docs = await _db.RagDocuments
-            .Where(r => r.UserId == userId && r.EmbeddingJson != null)
+            .Where(r => r.UserId == userId && r.SourceType == InsightSourceType && r.EmbeddingJson != null)
             .ToListAsync();
 
         var scored = docs
@@ -137,13 +130,5 @@ public class RagService
         return (float)(dot / (Math.Sqrt(na) * Math.Sqrt(nb)));
     }
 
-    public static string FormatChatMessage(ChatMessage m) =>
-        $"Chat [{m.CreatedAt.AddHours(8):yyyy-MM-dd}] {m.Role}: {m.Content}";
-
-    public static string FormatTask(StudyTask t) => TaskRagFormatter.FormatForIndex(t);
-
-    public static string FormatActivity(UserActivity a) => TaskRagFormatter.FormatActivity(a);
-
-    public static string FormatSession(StudySession s, string? taskTitle) =>
-        $"Focus session {s.StartedAt.AddHours(8):yyyy-MM-dd HH:mm}: {s.Duration / 60}min on {taskTitle ?? "General"}";
+    public static string FormatInsight(UserInsight i) => TaskRagFormatter.FormatInsight(i);
 }

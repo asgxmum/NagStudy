@@ -54,6 +54,34 @@ public class ChatReplyResponse
     public string Reply { get; set; } = string.Empty;
     public int UserMessageId { get; set; }
     public int AssistantMessageId { get; set; }
+    /// <summary>Agent tool / thinking steps for this turn (UI trace).</summary>
+    public List<AgentStepResponse> AgentSteps { get; set; } = new();
+    public List<ChatMessageResponse> ToolMessages { get; set; } = new();
+}
+
+public class AgentStepResponse
+{
+    /// <summary>tool | thinking</summary>
+    public string Type { get; set; } = "tool";
+    public string? ToolName { get; set; }
+    public string? Arguments { get; set; }
+    public string? ResultPreview { get; set; }
+    public string? Content { get; set; }
+}
+
+public class InsightResponse
+{
+    public int Id { get; set; }
+    public string Category { get; set; } = "other";
+    public string Summary { get; set; } = string.Empty;
+    public DateTime RecordedAt { get; set; }
+    public int? SourceMessageId { get; set; }
+}
+
+public class CreateInsightRequest
+{
+    public string Category { get; set; } = "other";
+    public string Summary { get; set; } = string.Empty;
 }
 
 public class ReportRequest
