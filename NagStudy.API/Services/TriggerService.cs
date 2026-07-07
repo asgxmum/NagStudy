@@ -58,7 +58,7 @@ public class TriggerService
 
         var ignoreReminderFlags = debugNowMinutes != null;
 
-        var context = await BuildTriggerContextAsync(userId, trigger, task, effectiveNow, ignoreReminderFlags, naggingContext);
+        var context = await BuildTriggerContextAsync(userId, trigger, task, effectiveNow, ignoreReminderFlags, force, naggingContext);
         if (context == null)
             return new TriggerResultResponse { ShouldShow = false };
 
@@ -79,9 +79,9 @@ public class TriggerService
         if (trigger == "DayBrief")
             user.LastDayBriefDate = TaskTimeHelper.MytDateToUtc(TaskTimeHelper.TodayMyt());
 
-        if (trigger == "TaskStarting" && task != null && !ignoreReminderFlags)
+        if (trigger == "TaskStarting" && task != null)
             task.StartReminderSentAt = DateTime.UtcNow;
-        if (trigger == "TaskEnded" && task != null && !ignoreReminderFlags)
+        if (trigger == "TaskEnded" && task != null)
             task.EndPromptSentAt = DateTime.UtcNow;
 
         await _db.SaveChangesAsync();
@@ -124,7 +124,7 @@ public class TriggerService
             a.UserId == userId && a.Trigger == trigger && a.CreatedAt >= since);
     }
 
-    private async Task<string?> BuildTriggerContextAsync(int userId, string trigger, StudyTask? task = null, DateTime? effectiveNowUtc = null, bool ignoreReminderFlags = false, NaggingContextDto? naggingContext = null)
+    private async Task<string?> BuildTriggerContextAsync(int userId, string trigger, StudyTask? task = null, DateTime? effectiveNowUtc = null, bool ignoreReminderFlags = false, bool force = false, NaggingContextDto? naggingContext = null)
     {
         var todayStart = DateTime.UtcNow.AddHours(8).Date.AddHours(-8);
         var yesterdayStart = todayStart.AddDays(-1);
@@ -161,16 +161,19 @@ public class TriggerService
             "Nagging" => BuildNaggingContext(tasks, now, todaySec, naggingContext),
             "TaskStarting" when task != null
                 && task.StartTime != null
-                && (ignoreReminderFlags || task.StartReminderSentAt == null)
+                && (task.StartReminderSentAt == null || ignoreReminderFlags)
                 && task.Status == "Scheduled"
                 && task.StartTime.Value.AddHours(8).Date == TaskTimeHelper.TodayMyt()
                 && IsInTaskStartingWindow(task.StartTime.Value, now) =>
                 $"Task starting soon: \"{task.Title}\" at {task.StartTime.Value.AddHours(8):HH:mm} MYT. Remind the student to get ready.",
             "TaskEnded" when task != null
+                && task.StartTime != null
                 && task.EndTime != null
-                && task.EndTime.Value.AddHours(8).Date == TaskTimeHelper.TodayMyt()
+                && task.StartTime <= now
                 && task.EndTime <= now
-                && (ignoreReminderFlags || task.EndPromptSentAt == null)
+                && task.EndTime.Value.AddHours(8).Date == TaskTimeHelper.TodayMyt()
+                && IsInTaskEndingWindow(task.EndTime.Value, now)
+                && (task.EndPromptSentAt == null || ignoreReminderFlags)
                 && task.Status == "Scheduled" =>
                 $"Scheduled block for \"{task.Title}\" just ended. Ask if they completed it — keep it to 1-2 sentences.",
             "TaskStarting" => null,
@@ -223,6 +226,12 @@ public class TriggerService
     {
         var until = TaskTimeHelper.MinutesOfDayMyt(startUtc) - TaskTimeHelper.MinutesOfDayMyt(nowUtc);
         return until <= 2 && until >= -2;
+    }
+
+    private static bool IsInTaskEndingWindow(DateTime endUtc, DateTime nowUtc)
+    {
+        var sinceMin = (nowUtc - endUtc).TotalMinutes;
+        return sinceMin >= 0 && sinceMin <= 10;
     }
 
     private async Task<string> GenerateNagAsync(int userId, AgentProfile profile, string trigger, string context)

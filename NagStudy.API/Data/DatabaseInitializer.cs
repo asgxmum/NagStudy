@@ -28,21 +28,29 @@ public static class DatabaseInitializer
     static void EnsureSchemaUpToDate(NagStudyContext db, ILogger logger)
     {
         db.Database.ExecuteSqlRaw("""
-            IF OBJECT_ID(N'[UserActivities]', N'U') IS NULL
+            IF OBJECT_ID(N'[UserInsights]', N'U') IS NULL
             BEGIN
-                CREATE TABLE [UserActivities] (
+                CREATE TABLE [UserInsights] (
                     [Id] int NOT NULL IDENTITY,
                     [UserId] int NOT NULL,
+                    [Category] nvarchar(32) NOT NULL DEFAULT N'other',
                     [Summary] nvarchar(max) NOT NULL,
                     [RecordedAt] datetime2 NOT NULL,
                     [SourceMessageId] int NULL,
-                    CONSTRAINT [PK_UserActivities] PRIMARY KEY ([Id]),
-                    CONSTRAINT [FK_UserActivities_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [Users] ([Id]) ON DELETE CASCADE
+                    CONSTRAINT [PK_UserInsights] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_UserInsights_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [Users] ([Id]) ON DELETE CASCADE
                 );
-                CREATE INDEX [IX_UserActivities_UserId] ON [UserActivities] ([UserId]);
+                CREATE INDEX [IX_UserInsights_UserId] ON [UserInsights] ([UserId]);
+            END
+            IF OBJECT_ID(N'[UserActivities]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[UserInsights]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM [UserInsights])
+            BEGIN
+                INSERT INTO [UserInsights] ([UserId], [Category], [Summary], [RecordedAt], [SourceMessageId])
+                SELECT [UserId], N'other', [Summary], [RecordedAt], [SourceMessageId] FROM [UserActivities];
             END
             """);
-        logger.LogInformation("Schema sync completed (UserActivities).");
+        logger.LogInformation("Schema sync completed (UserInsights).");
     }
 
     public static void SeedDevelopmentData(NagStudyContext db)

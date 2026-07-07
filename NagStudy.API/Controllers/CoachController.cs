@@ -86,6 +86,24 @@ public class CoachController : ControllerBase
         catch (InvalidOperationException ex) { return StatusCode(503, new { message = ex.Message }); }
     }
 
+    [HttpGet("insights")]
+    public async Task<IActionResult> ListInsights() =>
+        Ok(await _coach.ListInsightsAsync(UserId));
+
+    [HttpPost("insights")]
+    public async Task<IActionResult> CreateInsight([FromBody] CreateInsightRequest req)
+    {
+        try { return Ok(await _coach.CreateInsightAsync(UserId, req)); }
+        catch (InvalidOperationException ex) { return BadRequest(new { message = ex.Message }); }
+    }
+
+    [HttpDelete("insights/{id:int}")]
+    public async Task<IActionResult> DeleteInsight(int id)
+    {
+        if (!await _coach.DeleteInsightAsync(UserId, id)) return NotFound();
+        return NoContent();
+    }
+
     [HttpPost("trigger")]
     public async Task<IActionResult> Trigger([FromBody] TriggerRequest req) =>
         Ok(await _trigger.TriggerAsync(UserId, req.Trigger, req.Force, req.TaskId, req.DebugNowMinutes, req.NaggingContext));

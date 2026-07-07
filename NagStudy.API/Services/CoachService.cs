@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.SemanticKernel.Connectors.Google;
 using NagStudy.API.Data;
+using NagStudy.API.Infrastructure;
 using NagStudy.API.Models.Domain;
 using NagStudy.API.Models.DTO;
 
@@ -11,42 +13,65 @@ public class CoachService
 {
     private readonly NagStudyContext _db;
     private readonly CoachKernelFactory _kernelFactory;
+    private readonly CoachReportGenerator _reportGenerator;
     private readonly RagService _rag;
     private const int MaxContextMessages = 40;
+    private const int MaxAgentToolRounds = 8;
 
     const string AgentToolInstructions = """
         CONVERSATION STYLE:
-        - Match the user's intent. Greetings/small talk → reply naturally; do NOT dump today's focus minutes or task lists unless they ask.
-        - You may answer study questions, work/career questions, and general knowledge — not only study stats.
-        - Weave in known user facts (below) only when relevant. Never recite every fact you know in one reply.
-        - Vary phrasing; avoid opening every reply with "today you studied..." or similar templates.
+        - Match the user's intent. Greetings/small talk → reply naturally; do NOT dump task lists unless they ask.
+        - You may answer study, career, and general questions — not only study stats.
+        - Weave in known user Insights (below) only when relevant. Never recite every fact in one reply.
+        - Vary phrasing; avoid templated openings.
 
-        TOOLS (call when you need data not already in context below):
-        - Analytics-search_task_history: tasks in a date range (MYT) — default last 7 days if user gives no dates
-        - Analytics-get_summary_information: performance summary for a date range
-        - Analytics-get_relevant_information: semantic search over completed tasks, activities, chats, reports
-        - Study-get_pending_tasks: current open tasks
+        TOOLS (call when needed; you may call multiple tools across rounds until you can answer):
+        - Analytics-get_tasks: tasks **planned on** a MYT day (ScheduledDate — same as Yesterday Review). Gantt StartTime is time-of-day only.
+        - Analytics-get_summary_information: focus + completion stats for a range (not a narrative report).
+        - Analytics-get_summary_report: full narrative report when user wants 总结/复盘/report.
+        - Analytics-get_relevant_information: semantic search over saved user Insights (demographics, education, career, habits, etc.).
+
+        DATE RULES (mandatory):
+        - 今天/昨天/明天/yesterday/today map to the MYT dates in "Current time" above.
+        - Never invent calendar dates. If user says 昨天, call get_tasks with yesterday or its yyyy-MM-dd.
 
         TASK QUESTIONS (mandatory):
-        - When the user asks about 任务/耗时/完成情况/做了什么/刚才那些任务 — answer from REAL task data via tools or the pre-fetched / cached task blocks below.
-        - Do NOT say "we didn't discuss tasks in this chat". Their tasks live in the app database, not only in chat text.
-        - For duration comparisons (e.g. 哪个耗时最长), use start/end/duration fields from task data.
+        - Answer from get_tasks or cached tool data — never invent task names, times, or counts.
+        - For duration comparisons, use start/end/duration from get_tasks.
 
-        TOOL CACHE RULES:
-        - "Tool data already fetched this session" and "Pre-fetched task history" blocks are authoritative — reuse them.
-        - Do NOT call search_task_history again if equivalent data is already cached for the same period.
-        - Call get_relevant_information for personal facts or semantic recall not covered by task history cache.
+        TOOL CACHE:
+        - Reuse "Tool data already fetched this session" — do not repeat the same get_tasks date range.
 
-        ACTIVITY MEMORY (optional):
-        When you learn something worth remembering long-term (habits, identity, location, job, recurring preferences), append ONE block:
-        <ActivitySummery>one concise sentence in the user's language</ActivitySummery>
-        Only when genuinely useful. Most replies should NOT include this tag.
+        INSIGHT MEMORY (atomic — multiple tags allowed):
+        When the user shares durable personal facts, append one or more hidden blocks at the end of your reply.
+        Each block = ONE atomic fact — never combine age + gender + school + major in one tag.
+        Pick the correct category:
+        • demographic — age OR gender only (e.g. 20岁, 男生) — never "20岁男生"
+        • education — school OR major only (e.g. 厦门大学, 软件工程专业) — never "我是厦门大学"
+        • job — employment, internship, job title (NOT student status)
+        • location — where they live or study
+        • habit | interest | preference — routines, hobbies, likes
+        • other — only if nothing else fits
+
+        Format (repeat per fact):
+        <Insight category="demographic|education|job|location|habit|interest|preference|other">single atomic fact in user's language</Insight>
+
+        Example for "厦大20岁男生软工专业":
+        <Insight category="demographic">20岁</Insight>
+        <Insight category="demographic">男生</Insight>
+        <Insight category="education">厦门大学</Insight>
+        <Insight category="education">软件工程专业</Insight>
+
+        NEVER save: questions (…吗/呢/?), coach guesses, legal-age speculation, task status, moods, or get_tasks data.
+        Saying "记下来" without these tags does NOT save anything.
+        For age/identity/background questions, check Known Insights below or call get_relevant_information first.
         """;
 
-    public CoachService(NagStudyContext db, CoachKernelFactory kernelFactory, RagService rag)
+    public CoachService(NagStudyContext db, CoachKernelFactory kernelFactory, CoachReportGenerator reportGenerator, RagService rag)
     {
         _db = db;
         _kernelFactory = kernelFactory;
+        _reportGenerator = reportGenerator;
         _rag = rag;
     }
 
@@ -143,11 +168,13 @@ public class CoachService
         if (session == null) throw new UnauthorizedAccessException("Session not found.");
 
         var rows = await _db.ChatMessages
-            .Where(m => m.SessionId == sessionId && m.Role != "Tool")
+            .Where(m => m.SessionId == sessionId)
             .OrderBy(m => m.CreatedAt)
             .ToListAsync();
 
-        return rows.Select(m => new ChatMessageResponse
+        return rows
+            .Where(m => m.Role != "Tool" || m.MessageType == "ToolResult")
+            .Select(m => new ChatMessageResponse
         {
             Id = m.Id,
             Role = m.Role,
@@ -177,15 +204,14 @@ public class CoachService
         _db.ChatMessages.Add(userMsg);
         await _db.SaveChangesAsync();
 
-        _rag.IndexDocumentFireAndForget(userId, "ChatMessage", userMsg.Id, RagService.FormatChatMessage(userMsg));
-
         var history = await _db.ChatMessages
             .Where(m => m.SessionId == sessionId)
             .OrderBy(m => m.CreatedAt)
             .ToListAsync();
 
-        var rawReply = await GenerateAgentReplyAsync(userId, sessionId, session.Profile, history);
-        var activitySummary = LlmCompat.ExtractActivitySummary(rawReply);
+        var generation = await GenerateAgentReplyAsync(userId, sessionId, session.Profile, history);
+        var rawReply = generation.Raw;
+        var insights = LlmCompat.CombineInsightsFromExchange(message, rawReply);
         var reply = LlmCompat.NormalizeAssistantText(rawReply);
 
         var assistantMsg = new ChatMessage
@@ -203,18 +229,65 @@ public class CoachService
         session.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        if (activitySummary != null)
-            await SaveUserActivityAsync(userId, activitySummary, assistantMsg.Id);
-
-        _rag.IndexDocumentFireAndForget(userId, "ChatMessage", assistantMsg.Id, RagService.FormatChatMessage(assistantMsg));
+        if (insights.Count > 0)
+            await SaveUserInsightsAsync(userId, insights, assistantMsg.Id);
 
         return new ChatReplyResponse
         {
             Reply = reply,
             UserMessageId = userMsg.Id,
-            AssistantMessageId = assistantMsg.Id
+            AssistantMessageId = assistantMsg.Id,
+            AgentSteps = generation.Steps,
+            ToolMessages = generation.ToolMessages,
         };
     }
+
+    public async Task<List<InsightResponse>> ListInsightsAsync(int userId)
+    {
+        var rows = await _db.UserInsights
+            .Where(i => i.UserId == userId)
+            .OrderByDescending(i => i.RecordedAt)
+            .ToListAsync();
+        return rows.Select(MapInsight).ToList();
+    }
+
+    public async Task<InsightResponse> CreateInsightAsync(int userId, CreateInsightRequest req)
+    {
+        var summary = req.Summary.Trim();
+        if (string.IsNullOrWhiteSpace(summary))
+            throw new InvalidOperationException("Summary is required.");
+
+        var insight = new UserInsight
+        {
+            UserId = userId,
+            Category = InsightCategories.Normalize(req.Category),
+            Summary = summary,
+            RecordedAt = DateTime.UtcNow,
+        };
+        _db.UserInsights.Add(insight);
+        await _db.SaveChangesAsync();
+        _rag.IndexInsightFireAndForget(userId, insight.Id, RagService.FormatInsight(insight));
+        return MapInsight(insight);
+    }
+
+    public async Task<bool> DeleteInsightAsync(int userId, int insightId)
+    {
+        var insight = await _db.UserInsights.FirstOrDefaultAsync(i => i.Id == insightId && i.UserId == userId);
+        if (insight == null) return false;
+        _db.UserInsights.Remove(insight);
+        await _db.SaveChangesAsync();
+        _rag.DeleteInsightFireAndForget(userId, insightId);
+        return true;
+    }
+
+    static InsightResponse MapInsight(UserInsight i) => new()
+    {
+        Id = i.Id,
+        Category = i.Category,
+        Summary = i.Summary,
+        RecordedAt = i.RecordedAt,
+        SourceMessageId = i.SourceMessageId,
+    };
 
     public async Task<ChatReplyResponse> GenerateReportAsync(int userId, int sessionId, ReportRequest req)
     {
@@ -223,45 +296,9 @@ public class CoachService
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId)
             ?? throw new UnauthorizedAccessException("Session not found.");
 
-        var (start, end) = ResolvePeriod(req);
-        var startStr = start.AddHours(8).ToString("yyyy-MM-dd");
-        var endStr = end.AddHours(8).ToString("yyyy-MM-dd");
-
-        var snapshotKernel = _kernelFactory.CreateKernel(userId);
-        var studyData = await KernelPluginHelper.InvokeAsync(snapshotKernel, "Study", "get_study_summary");
-
-        var agentKernel = _kernelFactory.CreateAgentKernel(userId);
-        var periodSummary = await KernelPluginHelper.InvokeAsync(agentKernel, "Analytics", "get_summary_information",
-            new KernelArguments { ["startDate"] = startStr, ["endDate"] = endStr });
-        var taskHistory = await KernelPluginHelper.InvokeAsync(agentKernel, "Analytics", "search_task_history",
-            new KernelArguments { ["startDate"] = startStr, ["endDate"] = endStr });
-
-        var prompt = $"""
-            Generate a detailed study performance report in {req.Language}.
-            Period: {startStr} to {endStr} (MYT)
-
-            {PlainTextFormatter.OutputRules}
-
-            Required sections (each as ── Section ── then • bullets):
-            ── Focus overview ──
-            ── Task completion ──
-            ── Patterns ──
-            ── AI observations ──
-            ── Next-week suggestions ──
-
-            Use ONLY real data below. Do not invent numbers.
-
-            === Today/week snapshot (manual) ===
-            {studyData}
-
-            === Period summary ===
-            {periodSummary}
-
-            === Task history in period ===
-            {taskHistory}
-            """;
-
-        var reply = await InvokeLlmAsync(snapshotKernel, session.Profile.SystemPrompt, prompt);
+        var (start, end) = CoachReportGenerator.ResolvePeriod(req.Period, req.From, req.To);
+        var reply = await _reportGenerator.GenerateAsync(
+            userId, req.Period, req.Language, session.Profile.SystemPrompt);
 
         var userMsg = new ChatMessage
         {
@@ -296,13 +333,6 @@ public class CoachService
         session.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        var reportId = await _db.SummaryReports
-            .Where(r => r.SessionId == sessionId)
-            .OrderByDescending(r => r.Id)
-            .Select(r => r.Id)
-            .FirstAsync();
-        _rag.IndexDocumentFireAndForget(userId, "Report", reportId, reply);
-
         return new ChatReplyResponse
         {
             Reply = reply,
@@ -311,33 +341,45 @@ public class CoachService
         };
     }
 
-    async Task SaveUserActivityAsync(int userId, string summary, int sourceMessageId)
+    async Task SaveUserInsightsAsync(int userId, IReadOnlyList<(string Category, string Text)> insights, int sourceMessageId)
     {
-        var activity = new UserActivity
+        foreach (var (rawCategory, text) in insights)
         {
-            UserId = userId,
-            Summary = summary.Trim(),
-            RecordedAt = DateTime.UtcNow,
-            SourceMessageId = sourceMessageId
-        };
-        _db.UserActivities.Add(activity);
-        await _db.SaveChangesAsync();
-        _rag.IndexDocumentFireAndForget(userId, "Activity", activity.Id, RagService.FormatActivity(activity));
+            var validated = LlmCompat.ValidateInsight(rawCategory, text);
+            if (validated == null) continue;
+            var (category, summary) = validated.Value;
+            if (await _db.UserInsights.AnyAsync(i =>
+                    i.UserId == userId && i.Category == category && i.Summary == summary))
+                continue;
+
+            var insight = new UserInsight
+            {
+                UserId = userId,
+                Category = category,
+                Summary = summary,
+                RecordedAt = DateTime.UtcNow,
+                SourceMessageId = sourceMessageId
+            };
+            _db.UserInsights.Add(insight);
+            await _db.SaveChangesAsync();
+            _rag.IndexInsightFireAndForget(userId, insight.Id, RagService.FormatInsight(insight));
+        }
     }
 
-    async Task<string> GenerateAgentReplyAsync(int userId, int sessionId, AgentProfile profile, List<ChatMessage> history)
+    sealed class AgentGenerationResult
+    {
+        public string Raw { get; init; } = "";
+        public List<AgentStepResponse> Steps { get; init; } = new();
+        public List<ChatMessageResponse> ToolMessages { get; init; } = new();
+    }
+
+    async Task<AgentGenerationResult> GenerateAgentReplyAsync(int userId, int sessionId, AgentProfile profile, List<ChatMessage> history)
     {
         var kernel = _kernelFactory.CreateAgentKernel(userId);
         var chat = kernel.GetRequiredService<IChatCompletionService>();
 
-        var userMemory = await BuildUserMemoryContextAsync(userId);
+        var insightContext = await BuildUserInsightContextAsync(userId);
         var toolCache = BuildToolCacheContext(history);
-
-        var latestUserMsg = history.LastOrDefault(m => m.Role == "User")?.Content ?? "";
-        var prefetchedTasks = await PrefetchTaskHistoryIfNeededAsync(
-            sessionId, kernel, history, toolCache, latestUserMsg);
-        if (prefetchedTasks != null)
-            toolCache = AppendToolCacheBlock(toolCache, prefetchedTasks);
 
         var systemPrompt = $"""
             {profile.SystemPrompt}
@@ -346,7 +388,9 @@ public class CoachService
 
             {AgentToolInstructions}
 
-            {userMemory}
+            {TaskTimeHelper.FormatMytClockContext()}
+
+            {insightContext}
 
             {toolCache}
             """;
@@ -369,12 +413,11 @@ public class CoachService
 
         try
         {
-            var settings = _kernelFactory.CreateChatSettings(enableTools: true);
+            var settings = _kernelFactory.CreateChatSettings(enableTools: true, autoInvokeTools: false);
             var recorder = CoachToolScope.Begin();
             try
             {
-                var result = await chat.GetChatMessageContentAsync(chatHistory, settings, kernel);
-                var raw = result.Content ?? "";
+                var raw = await RunAgentToolLoopAsync(chat, chatHistory, settings, kernel, recorder);
                 if (string.IsNullOrWhiteSpace(LlmCompat.StripInternalTags(raw)))
                     throw new InvalidOperationException("LLM returned an empty response.");
 
@@ -393,7 +436,28 @@ public class CoachService
                 if (recorder.Records.Count > 0)
                     await _db.SaveChangesAsync();
 
-                return raw;
+                var toolMsgs = await _db.ChatMessages
+                    .Where(m => m.SessionId == sessionId && m.Role == "Tool")
+                    .OrderByDescending(m => m.CreatedAt)
+                    .Take(recorder.Records.Count)
+                    .ToListAsync();
+
+                return new AgentGenerationResult
+                {
+                    Raw = raw,
+                    Steps = BuildAgentSteps(recorder, raw),
+                    ToolMessages = toolMsgs
+                        .OrderBy(m => m.CreatedAt)
+                        .Select(m => new ChatMessageResponse
+                        {
+                            Id = m.Id,
+                            Role = m.Role,
+                            MessageType = m.MessageType,
+                            Content = m.Content,
+                            CreatedAt = m.CreatedAt,
+                        })
+                        .ToList(),
+                };
             }
             finally
             {
@@ -408,11 +472,78 @@ public class CoachService
         }
     }
 
+    static async Task<string> RunAgentToolLoopAsync(
+        IChatCompletionService chat,
+        ChatHistory chatHistory,
+        PromptExecutionSettings settings,
+        Kernel kernel,
+        ToolInvocationRecorder _)
+    {
+        string? lastText = null;
+        for (var round = 0; round < MaxAgentToolRounds; round++)
+        {
+            var result = await chat.GetChatMessageContentAsync(chatHistory, settings, kernel);
+            lastText = result.Content;
+
+            var functionCalls = result.Items.OfType<FunctionCallContent>().ToList();
+            if (functionCalls.Count == 0)
+                return result.Content ?? "";
+
+            chatHistory.Add(result);
+            foreach (var call in functionCalls)
+            {
+                try
+                {
+                    var fnResult = await call.InvokeAsync(kernel);
+                    chatHistory.Add(fnResult.ToChatMessage());
+                }
+                catch (Exception ex)
+                {
+                    chatHistory.Add(new FunctionResultContent(call, ex).ToChatMessage());
+                }
+            }
+        }
+
+        return lastText ?? "";
+    }
+
     static string BuildToolCacheContext(List<ChatMessage> history)
     {
         var toolMsgs = history.Where(m => m.Role == "Tool").TakeLast(6).ToList();
         if (toolMsgs.Count == 0) return "";
         return FormatToolCacheBlock(string.Join("\n---\n", toolMsgs.Select(m => m.Content.Trim())));
+    }
+
+    static List<AgentStepResponse> BuildAgentSteps(ToolInvocationRecorder recorder, string raw)
+    {
+        var steps = new List<AgentStepResponse>();
+        var thinking = LlmCompat.ExtractReasoningText(raw);
+        if (!string.IsNullOrWhiteSpace(thinking))
+        {
+            steps.Add(new AgentStepResponse
+            {
+                Type = "thinking",
+                Content = thinking.Length > 600 ? thinking[..600] + "…" : thinking,
+            });
+        }
+
+        foreach (var r in recorder.Records)
+        {
+            steps.Add(new AgentStepResponse
+            {
+                Type = "tool",
+                ToolName = r.ToolName,
+                Arguments = r.Arguments,
+                ResultPreview = PreviewToolResult(r.Result),
+            });
+        }
+        return steps;
+    }
+
+    static string PreviewToolResult(string result, int max = 320)
+    {
+        var t = (result ?? "").Trim();
+        return t.Length <= max ? t : t[..max] + "…";
     }
 
     static string FormatToolCacheBlock(string body) =>
@@ -422,103 +553,23 @@ public class CoachService
             ===
             """;
 
-    static string AppendToolCacheBlock(string existing, string newBlock) =>
-        string.IsNullOrWhiteSpace(existing) ? newBlock : $"{existing}\n{newBlock}";
-
-    async Task<string?> PrefetchTaskHistoryIfNeededAsync(
-        int sessionId,
-        Kernel kernel,
-        List<ChatMessage> history,
-        string existingCache,
-        string latestUserMessage)
+    async Task<string> BuildUserInsightContextAsync(int userId)
     {
-        if (!CoachQueryHelper.NeedsTaskData(latestUserMessage))
-            return null;
-        if (CoachQueryHelper.HasCachedTaskHistory(history) ||
-            existingCache.Contains("search_task_history", StringComparison.OrdinalIgnoreCase))
-            return null;
-
-        var endMyt = DateTime.UtcNow.AddHours(8).Date;
-        var startMyt = endMyt.AddDays(-7);
-        var taskData = await KernelPluginHelper.InvokeAsync(kernel, "Analytics", "search_task_history",
-            new KernelArguments
-            {
-                ["startDate"] = startMyt.ToString("yyyy-MM-dd"),
-                ["endDate"] = endMyt.ToString("yyyy-MM-dd")
-            });
-
-        var record = ToolInvocationRecorder.FormatRecord(
-            new ToolInvocationRecord("Analytics-search_task_history",
-                $"startDate={startMyt:yyyy-MM-dd}, endDate={endMyt:yyyy-MM-dd}", taskData));
-
-        _db.ChatMessages.Add(new ChatMessage
-        {
-            SessionId = sessionId,
-            Role = "Tool",
-            MessageType = "ToolResult",
-            Content = record,
-            CreatedAt = DateTime.UtcNow
-        });
-        await _db.SaveChangesAsync();
-
-        return FormatToolCacheBlock(record);
-    }
-
-    async Task<string> BuildUserMemoryContextAsync(int userId)
-    {
-        var activities = await _db.UserActivities
+        var insights = await _db.UserInsights
             .Where(a => a.UserId == userId)
             .OrderByDescending(a => a.RecordedAt)
-            .Take(8)
+            .Take(15)
             .ToListAsync();
 
-        if (activities.Count == 0) return "";
+        if (insights.Count == 0) return "";
 
-        var lines = activities.Select(a =>
-            $"• [{a.RecordedAt.AddHours(8):yyyy-MM-dd}] {a.Summary.Trim()}");
+        var lines = insights.Select(a =>
+            $"• [{a.Category}] [{a.RecordedAt.AddHours(8):yyyy-MM-dd}] {a.Summary.Trim()}");
         return $"""
-            === Known facts about this user (from past conversations — use naturally when relevant) ===
+            === Known Insights about this user (from past conversations — use naturally when relevant) ===
             {string.Join("\n", lines)}
             ===
             """;
-    }
-
-    private async Task<string> InvokeLlmAsync(Kernel kernel, string systemPrompt, string userPrompt)
-    {
-        try
-        {
-            var chat = kernel.GetRequiredService<IChatCompletionService>();
-            var history = new ChatHistory(systemPrompt);
-            history.AddUserMessage(userPrompt);
-            var settings = _kernelFactory.CreateChatSettings();
-            var result = await chat.GetChatMessageContentAsync(history, settings, kernel);
-            var text = LlmCompat.NormalizeAssistantText(result.Content);
-            return text.Length > 0 ? text : "I'm having trouble responding right now. Please try again.";
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException(
-                $"{_kernelFactory.ProviderDisplayName} is temporarily unavailable. Please try again.", ex);
-        }
-    }
-
-    private static (DateTime start, DateTime end) ResolvePeriod(ReportRequest req)
-    {
-        var nowMyt = DateTime.UtcNow.AddHours(8).Date;
-        return req.Period switch
-        {
-            "7days" => (nowMyt.AddDays(-7).AddHours(-8), DateTime.UtcNow),
-            "30days" => (nowMyt.AddDays(-30).AddHours(-8), DateTime.UtcNow),
-            "custom" when req.From.HasValue && req.To.HasValue => (req.From.Value, req.To.Value),
-            _ => (GetWeekStartUtc(), DateTime.UtcNow)
-        };
-    }
-
-    private static DateTime GetWeekStartUtc()
-    {
-        var nowMyt = DateTime.UtcNow.AddHours(8);
-        int daysSinceMonday = ((int)nowMyt.DayOfWeek + 6) % 7;
-        return nowMyt.Date.AddDays(-daysSinceMonday).AddHours(-8);
     }
 
     private async Task<AgentProfile> ResolveProfileAsync(int profileId)

@@ -23,8 +23,8 @@ public class CoachKernelFactory
     public bool UseMiniMax => LlmSettings.IsMiniMax(_config);
     public string ProviderDisplayName => LlmSettings.ProviderDisplayName(_config);
 
-    public PromptExecutionSettings CreateChatSettings(bool enableTools = false) =>
-        LlmCompat.CreateChatSettings(_config, enableTools);
+    public PromptExecutionSettings CreateChatSettings(bool enableTools = false, bool autoInvokeTools = true) =>
+        LlmCompat.CreateChatSettings(_config, enableTools, autoInvokeTools);
 
     /// <summary>Triggers / manual snapshot (get_study_summary only).</summary>
     public Kernel CreateKernel(int userId)
@@ -38,7 +38,6 @@ public class CoachKernelFactory
     public Kernel CreateAgentKernel(int userId)
     {
         var kernel = BuildChatKernel();
-        kernel.Plugins.AddFromObject(new StudyContextPlugin(_scopeFactory, userId), "Study");
         kernel.Plugins.AddFromObject(new StudyAnalyticsPlugin(_scopeFactory, userId), "Analytics");
         return kernel;
     }

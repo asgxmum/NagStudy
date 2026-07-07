@@ -81,7 +81,7 @@ npm run dev
 ## 6. 数据库说明
 
 - 不用 `dotnet ef`，首次 `dotnet run` 自动建表。
-- 从旧库升级若缺 `UserActivities` 表：重启 API 会自动补建；或删库 `NagStudyDb` 重建。
+- 从旧库升级若缺 `UserInsights` 表：重启 API 会自动补建（旧 `UserActivities` 数据会迁移）；或删库 `NagStudyDb` 重建。
 - ⚠️ **本分支给 `Users` 表加了一列 `HasSeenTutorial`**（bit，默认 0）—— 用来记住用户看没看过新手引导 tour，
   否则每次登录都会重新弹引导。它已写进 `User.cs` 实体，但 `EnsureCreated` **不会给已存在的表补列**，所以：
   - **全新库**：首次 `dotnet run` 自动带上这列，无需操作。

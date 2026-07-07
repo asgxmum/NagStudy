@@ -20,7 +20,7 @@ public class NagStudyContext : DbContext
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
     public DbSet<RagDocument> RagDocuments => Set<RagDocument>();
     public DbSet<SummaryReport> SummaryReports => Set<SummaryReport>();
-    public DbSet<UserActivity> UserActivities => Set<UserActivity>();
+    public DbSet<UserInsight> UserInsights => Set<UserInsight>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -96,8 +96,8 @@ public class NagStudyContext : DbContext
             .HasForeignKey(r => r.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        modelBuilder.Entity<UserActivity>()
-            .HasOne(a => a.User).WithMany(u => u.UserActivities)
+        modelBuilder.Entity<UserInsight>()
+            .HasOne(a => a.User).WithMany(u => u.UserInsights)
             .HasForeignKey(a => a.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
