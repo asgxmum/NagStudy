@@ -10,7 +10,7 @@ motivated.
 
 Built for **SWE310** as a group project.
 
-**▶ [Watch the demo video](https://drive.google.com/file/d/1sR68NXwVYeUGIUq5BTOCggCb4CHzYz0i/view?usp=sharing)**
+**📑 [View the presentation slides](https://docs.google.com/presentation/d/1B2Jau74wVyGsd_UirnGCe7SFevOSyvOI/edit?usp=sharing)**
 
 ---
 
