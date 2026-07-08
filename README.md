@@ -10,6 +10,8 @@ motivated.
 
 Built for **SWE310** as a group project.
 
+**▶ [Watch the demo video](https://drive.google.com/file/d/1sR68NXwVYeUGIUq5BTOCggCb4CHzYz0i/view?usp=sharing)**
+
 ---
 
 ## Key Features
