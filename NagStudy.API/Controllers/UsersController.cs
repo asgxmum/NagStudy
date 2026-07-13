@@ -104,6 +104,16 @@ public class UsersController : ControllerBase
         return NoContent();
     }
 
+    [HttpPut("me/tutorial")]
+    public async Task<IActionResult> CompleteTutorial()
+    {
+        var user = await _db.Users.FindAsync(CurrentUserId);
+        if (user == null) return NotFound();
+        user.HasSeenTutorial = true;
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
+
     private static object MapUser(Models.Domain.User user) => new
     {
         user.Email,
@@ -113,6 +123,7 @@ public class UsersController : ControllerBase
         nagProfileId = user.NagProfileId,
         nagProfileName = user.NagProfile?.Name,
         nagProfileKey = user.NagProfile?.Key,
-        aiNotificationsEnabled = user.AiNotificationsEnabled
+        aiNotificationsEnabled = user.AiNotificationsEnabled,
+        hasSeenTutorial = user.HasSeenTutorial
     };
 }

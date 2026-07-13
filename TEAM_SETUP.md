@@ -66,6 +66,11 @@ npm run dev
 - API：`https://localhost:5178/api`
 - 前端：`http://localhost:5173`
 
+> ⚠️ **`npm install` 一定要跑**：本分支前端新增了几个依赖 —— **gsap**（顶部导航 hover sweep 动画）、
+> **intro.js**（新手引导 tour），以及任务弹窗时间选择器用的 **MUI** 一套（`@mui/material`、
+> `@mui/x-date-pickers`、`@emotion/react`、`@emotion/styled`、`dayjs`，共 5 个）。不装会报
+> `Failed to resolve import "..."`，前端直接起不来。全部都在 `package.json` 里，`npm install` 会自动装。
+
 ## 5. 演示账号
 
 | 角色 | 邮箱 | 密码 |
@@ -77,6 +82,16 @@ npm run dev
 
 - 不用 `dotnet ef`，首次 `dotnet run` 自动建表。
 - 从旧库升级若缺 `UserActivities` 表：重启 API 会自动补建；或删库 `NagStudyDb` 重建。
+- ⚠️ **本分支给 `Users` 表加了一列 `HasSeenTutorial`**（bit，默认 0）—— 用来记住用户看没看过新手引导 tour，
+  否则每次登录都会重新弹引导。它已写进 `User.cs` 实体，但 `EnsureCreated` **不会给已存在的表补列**，所以：
+  - **全新库**：首次 `dotnet run` 自动带上这列，无需操作。
+  - **已有旧 `NagStudyDb`**：要么删库 `NagStudyDb` 重建，要么在 SSMS 手动补列：
+
+    ```sql
+    ALTER TABLE Users ADD HasSeenTutorial bit NOT NULL DEFAULT 0;
+    ```
+
+  不加这列，登录读 `/api/users/me` 时会报 `Invalid column name 'HasSeenTutorial'`。
 
 ## 7. 未纳入 Git 的文件
 

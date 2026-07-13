@@ -14,6 +14,7 @@ public class User
     public AgentProfile? NagProfile { get; set; }
 
     public bool AiNotificationsEnabled { get; set; } = true;
+    public bool HasSeenTutorial { get; set; } = false;
     public string Status { get; set; } = "Active"; //Active/Banned/Deleted
     public DateTime CreatedAt { get; set; }
 

@@ -45,7 +45,11 @@ public static class DatabaseInitializer
         logger.LogInformation("Schema sync completed (UserActivities).");
     }
 
-    public static void SeedDevelopmentData(NagStudyContext db) => DemoSeeder.Seed(db);
+    public static void SeedDevelopmentData(NagStudyContext db)
+    {
+        DemoSeeder.Seed(db);
+        DemoSeeder.TopUpCurrentWeek(db); // keep the demo leaderboard populated every week
+    }
 
     static void SeedAdminIfMissing(NagStudyContext db, IConfiguration config, ILogger logger)
     {

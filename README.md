@@ -44,6 +44,12 @@ NagStudy/
 | tailwindcss | 4.0.0 | CSS 框架 |
 | @tailwindcss/vite | 4.0.0 | Tailwind 的 Vite 插件 |
 | @vitejs/plugin-react | 4.3.4 | Vite 的 React 插件 |
+| **gsap** | **3.15.0** | **动画库（PillNav 顶部导航的 hover sweep 动画）** |
+| **intro.js** | **8.3.2** | **新手引导 tour（onboarding 分步引导）** |
+| **@mui/material** | **9.1.2** | **MUI 组件库（任务弹窗时间选择器 TimePicker 用）** |
+| **@mui/x-date-pickers** | **9.8.0** | **MUI 时间/日期选择器（这里用 TimePicker）** |
+| **@emotion/react** / **@emotion/styled** | **11.14.x** | **MUI 的样式引擎（MUI 的 peer 依赖，必装）** |
+| **dayjs** | **1.11.21** | **MUI 选择器用的日期库（AdapterDayjs）** |
 
 > 后端版本来自 `NagStudy.API/NagStudy.API.csproj`，前端版本来自 `NagStudy.Web/package.json`，
 > 以这两个文件为准（`package.json` 里的 `^` 表示「兼容的最低版本」）。
@@ -247,6 +253,48 @@ git pull origin main             # 把最新 main 合进你的分支（不是反
   - Coach 响应 ~6s，建议做 **流式输出**。
   - `Microsoft.SemanticKernel.Core 1.64.0` 有已知漏洞（NU1904），建议升级。
 - **注意**：以上修改目前只在 **本地 temp 文件夹**，尚未提交到 `origin/temp`。
+
+### 7.3 · LZH（落地页 / 导航打磨 + reactbits 接入 + 性能修复）
+
+> 在 `feat/tutorial` 分支（YWX 的新手引导 tour）本地做的落地页 UI 打磨、reactbits 组件接入和一个性能 bug 修复。
+
+- **⬇️ 新增的依赖 / 下载的东西（重要，记一下，别漏装）**：
+  - **gsap `^3.15.0`** —— npm 依赖，`package.json` 已加，别人 `npm install` 会自动装。给 **PillNav** 导航的 hover sweep 动画用。
+  - **reactbits 组件（手动加的源码，不是 npm 包）**：`src/components/BorderGlow/`（落地页教练卡片的边框光晕）、`src/components/PillNav/`（顶部导航）。来源是 reactbits 官方 registry 的 `-JS-CSS` 版本（纯 JS + CSS），要更新就重新下 registry JSON，不用 shadcn init。
+  - **ShinyText 效果没有装库** —— reactbits 官方版需要 `motion` 依赖；我用**纯 CSS** 实现了同样的扫光效果（`prototype.css` 的 `.shiny` + `@keyframes shinySweep`），所以**没有引入 motion / framer-motion**。用在 "win" 和 "coach" 两个词上；波浪下划线用 SVG 动画渐变同步扫光。
+  - **`public/bunny_run_final.gif`** —— 引导 tour 进度条上「奔跑的兔子」用的 GIF。
+  - **MUI 时间选择器（新增 5 个 npm 依赖）**：`@mui/material` + `@mui/x-date-pickers` + `@emotion/react` + `@emotion/styled` + `dayjs`。用在 **任务弹窗（`TaskPopover.jsx`）的 Start / End 时间**：把原来的自定义选择器换成 **MUI `TimePicker`**（24 小时制、点时钟图标弹出可滚动选「时 / 分」、**Start** 旁加了 **Now** 按钮填当前时间（End 不加 —— 逻辑上「结束时间＝现在」没意义）、可清空 = Backlog）。已用 `createTheme` 把主色调成品牌珊瑚色 `#E8734A`；因为任务弹窗 `z-index: 9000`，给 picker 弹层设了 `zIndex: 9500` 让它浮在弹窗之上。别人 `npm install` 会自动装这 5 个。
+- **改了什么（落地页 UI，`LandingPage.jsx` + `prototype.css` + `PillNav`）**：导航还原成原始文字链接外观（保留 hover sweep 动画）、sticky 顶栏（品牌左 / 链接右）、英雄区满屏（`calc(100vh - 82px)`，下一屏不再露出）、兔子插画大小/位置调整 + peach 圆形按原比例放大以容纳兔子、▶ Play Demo 三角光学居中。
+- **改了什么（引导 tour，`tour.css`）**：进度条从纯橙色条改成 **橙色进度 + 前端奔跑的兔子 GIF**（进度增加，兔子往右跑，留橙色轨迹）。
+- **🐛 性能 bug 修复（重要）**：导航动画每 5 秒卡顿 / 有时停住 —— 根因是落地页**后感言轮播每 5 秒 re-render**，而 `items={[...]}` 是内联数组、每次都是新引用 → `PillNav` 的 `layout()` effect 被重跑 → **强制回流（forced reflow）~400ms** 冻结主线程。用 **`useMemo` 稳定 `navItems` 引用** 解决；已用 Chrome 性能 trace 验证回流消失。
+- **⚙️ 拉下来之后要做的设置（重要，不做 tour 起不来 / 缺依赖）**：
+  1. **前端装依赖**：`cd NagStudy.Web` → `npm install`。会自动装上新加的 **gsap**（导航动画）和 **intro.js**（引导 tour）。不装的话前端会报 `Failed to resolve import "gsap"` / `"intro.js"`。
+  2. **数据库加了一列 `HasSeenTutorial`（Users 表，bit，默认 0）** —— 用来记住「这个用户看过引导了没」。它已经写进 `User.cs` 实体：
+     - **全新数据库**：第一次 `dotnet run` 会 `EnsureCreated` 自动带上这列，**啥都不用做**。
+     - **已有旧 `NagStudyDb` 的人**：`EnsureCreated` **不会**给已存在的表补列 → 要么 **删库重建**（SSMS 里 `DROP DATABASE NagStudyDb` 再 `dotnet run`），要么手动补列：
+
+       ```sql
+       ALTER TABLE Users ADD HasSeenTutorial bit NOT NULL DEFAULT 0;
+       ```
+
+     不加这列，登录 `/me` 读 `HasSeenTutorial` 时会报 `Invalid column name 'HasSeenTutorial'`。
+  3. **`bunny_run_final.gif`、reactbits 组件（BorderGlow / PillNav）都是仓库里的源码/静态资源**，`git pull` 下来就有，**不用额外操作**。
+  4. 后端新增接口 `PUT /api/users/me/tutorial`（tour 走完时标记「已看过」），登录 / `/me` 响应里多返回 `hasSeenTutorial` 字段 —— 前端已对接，无需手动配置。
+- **还没解决的 / 注意**：以上改动目前**只在本地 `NagStudy-feat-tutorial` 文件夹**，尚未提交到 `origin`。
+
+### 7.3 · LZH（任务板：演示数据修复 + 空状态提示 + 引导补充）
+
+- **改了什么**：
+  - **修复「Yesterday's review」/ Today / Gantt 演示数据「消失」**：`DemoSeeder.SeedTasks` 原来是「这个用户有任何任务就跳过」，于是种子任务的日期**冻结在建库当天**，DB 放几天后这些「昨天/今天」任务就漂移出窗口 → 昨天回顾空、Today 板空、Gantt 空（看起来像功能没了）。改成**每次启动重新锚定**：某演示用户若没有「真正昨天」的任务，就清掉旧板、用当前日期重新播种（5 个演示号各自不同的 mix）。和之前修排行榜 stale 是同一套思路。
+  - **空状态文案更明确**（原来都是 "Nothing here"，给 `TaskColumn` 加了 `emptyText` prop）：
+    - Today 空 → "No tasks for today yet — hit "+ Add task" and fill your day! ✏️"
+    - Backlog 空 → "Nothing saved for later — brain-dump tasks here anytime."
+    - 昨天回顾空 → "No tasks from yesterday yet — add a few to your board and get to work! 💪"
+    - **「Yesterday's review」区块现在始终显示**（原来 `yesterday.length > 0` 才显示，新用户看不到 → 改成始终显示 + 空状态提示，方便新用户发现功能）。
+  - **新手引导 tour 加了一步**：Tasks 页第一步讲解「Yesterday's review」（看昨天完成/错过、用 `↓ To today` 把错过的任务挪到今天）。
+- **遇到的报错 / 为什么改**：组员反馈「昨天回顾不见了」。实测 `GET /tasks?date=yesterday` 对演示号 FocusFox 返回 **0 条** → 确认是**种子日期过期**，不是代码被删（前端渲染 + 后端 `date=yesterday` 处理都在）。
+- **⚙️ 生效方式**：`DemoSeeder` 在 Development 每次启动都会跑，所以**重启后端**（`NagStudy.API` 里 `dotnet run` 重开）就会把演示板刷新到当前日期，**不用删库**。正在运行的旧实例不会重新播种。
+- **还没解决的**：无。以上仍只在本地 `NagStudy-feat-tutorial`，未提交到 `origin`。
 
 ### 📋 模板（复制这段写你自己的）
 

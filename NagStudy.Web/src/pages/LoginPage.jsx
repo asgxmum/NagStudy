@@ -11,7 +11,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => localStorage.getItem("rememberedEmail") || "");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   // Forgot-password is out of scope for this demo (no email server). Rather than a dead
@@ -41,7 +41,13 @@ export default function LoginPage() {
         nagProfileName: data.nagProfileName,
         nagProfileKey: data.nagProfileKey,
         aiNotificationsEnabled: data.aiNotificationsEnabled !== false,
+        hasSeenTutorial: data.hasSeenTutorial === true,
       }, remember);
+    if (remember) {
+        localStorage.setItem("rememberedEmail", email);
+    } else {
+        localStorage.removeItem("rememberedEmail");
+    }
       navigate(data.role === "Admin" ? "/admin" : "/app");
     } catch (err) {
       setError(err.response?.data?.message ?? "Login failed. Check your credentials.");
@@ -71,7 +77,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@university.edu.my"
-              autoComplete="off"
+              autoComplete="email"
             />
           </div>
           <div className="auth-field">
@@ -81,7 +87,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              autoComplete="new-password"
+              autoComplete="current-password"
             />
           </div>
           <div className="auth-row">
